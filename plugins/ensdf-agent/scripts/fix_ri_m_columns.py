@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
 """
-Fix ENSDF G-record RI and M left-shift issues only.
+Fix ENSDF G-record RI and M left-shift issues only. Shifts RI/M columns right by one if col22/col32 are non-space, but only on true G-records with strict 80-character length.
 
 Usage:
   python fix_ri_m_columns.py Cl34_adopted.ens
   python fix_ri_m_columns.py A34/Cl34/new/Cl34_adopted.ens
+    python fix_ri_m_columns.py A35/S35/new/S35_*.ens
+    python fix_ri_m_columns.py A35/S35/new/*.ens A35/Cl35/new/*.ens
 
 Behavior:
-- Accepts file path or bare filename.
-- If bare filename is not found directly, searches workspace recursively.
+- Edits matched input files IN-PLACE (no separate output files created).
+- Accepts one or more file paths, bare filenames, or glob patterns.
+- If a non-glob bare filename is not found directly, searches workspace recursively.
+- Glob patterns must resolve to at least one file.
 - Requires true G-record lines to be exactly 80 characters (excluding newline).
 - Non-G lines are passed through unchanged.
 - Applies only these fixes on true G-records:
   1) RI: col22->col23 shift (indices 21:28 -> 22:29)
   2) M:  col32->col33 shift (indices 31:40 -> 32:41)
 - DRI and all non-target columns remain byte-identical.
-- Writes output to D:/X/ND/Files/<stem>.out
 """
 
 from __future__ import annotations
@@ -24,11 +27,17 @@ import argparse
 from pathlib import Path
 from typing import Iterable
 
-OUT_DIR = Path(r"D:/X/ND/Files")
-
 
 def is_true_g_record(line80: str) -> bool:
-    return len(line80) == 80 and line80[6] == " " and line80[7] == "G" and line80[8] == " "
+    # col 6 (idx 5) = CONT: must be blank for primary records; non-blank means continuation record
+    # col 7 (idx 6) = space; col 8 (idx 7) = record type 'G'; col 9 (idx 8) = space
+    return (
+        len(line80) == 80
+        and line80[5] == " "   # CONT field blank = primary record, not continuation
+        and line80[6] == " "
+        and line80[7] == "G"
+        and line80[8] == " "
+    )
 
 
 def resolve_input(user_arg: str, workspace_root: Path) -> Path:
@@ -58,14 +67,53 @@ def resolve_input(user_arg: str, workspace_root: Path) -> Path:
     )
 
 
+def has_wildcard(token: str) -> bool:
+    return any(ch in token for ch in "*?[")
+
+
+def resolve_inputs(user_args: list[str], workspace_root: Path) -> list[Path]:
+    resolved: list[Path] = []
+    seen: set[Path] = set()
+
+    for arg in user_args:
+        matches: list[Path]
+
+        if has_wildcard(arg):
+            pattern = Path(arg)
+
+            if pattern.is_absolute():
+                parent = pattern.parent
+                if not parent.exists():
+                    raise FileNotFoundError(f"Pattern parent does not exist: {parent}")
+                matches = sorted(
+                    m.resolve() for m in parent.glob(pattern.name) if m.is_file()
+                )
+            else:
+                matches = sorted(
+                    m.resolve() for m in workspace_root.glob(arg) if m.is_file()
+                )
+
+            if not matches:
+                raise FileNotFoundError(f"Pattern matched no files: {arg}")
+        else:
+            matches = [resolve_input(arg, workspace_root)]
+
+        for m in matches:
+            if m not in seen:
+                seen.add(m)
+                resolved.append(m)
+
+    return resolved
+
+
 def ensure_g_lines_80(lines: Iterable[str], src: Path) -> None:
     bad = []
     for i, line in enumerate(lines, start=1):
         core = line[:-1] if line.endswith("\n") else line
         if core == "" or len(core) < 9:
             continue
-        # Enforce strict 80-column length only for true G-records.
-        if core[6] == " " and core[7] == "G" and core[8] == " " and len(core) != 80:
+        # Enforce strict 80-column length only for primary G-records (CONT field blank at idx 5).
+        if core[5] == " " and core[6] == " " and core[7] == "G" and core[8] == " " and len(core) != 80:
             bad.append((i, len(core)))
             if len(bad) >= 10:
                 break
@@ -82,15 +130,17 @@ def fix_one_line(line80: str) -> tuple[str, bool, bool]:
     ri_fixed = False
     m_fixed = False
 
-    # RI fix (only if content is incorrectly at col22/index21)
-    if chars[21] != " " and any(c != " " for c in chars[22:29]):
-        moved = chars[21:28]  # cols 22-28
+    # RI fix: col 22 (idx 21) must always be a readability space in valid G-records.
+    # If it is non-space, the RI value is shifted one column left and must be corrected.
+    if chars[21] != " ":
+        moved = chars[21:28]  # 7 chars starting at wrong col 22
         chars[21] = " "
-        chars[22:29] = moved   # cols 23-29
+        chars[22:29] = moved   # shift right to correct cols 23-29
         ri_fixed = True
 
-    # M fix (only if content is incorrectly at col32/index31)
-    if chars[31] != " " and any(c != " " for c in chars[32:41]):
+    # M fix: col 32 (idx 31) must always be a readability space in valid G-records.
+    # If it is non-space, the M value is shifted one column left and must be corrected.
+    if chars[31] != " ":
         moved = chars[31:40]  # cols 32-40
         chars[31] = " "
         chars[32:41] = moved   # cols 33-41
@@ -140,32 +190,47 @@ def process(src: Path) -> Path:
 
         out_lines.append(fixed + nl)
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / f"{src.stem}.out"
-    out_path.write_text("".join(out_lines), encoding="utf-8", newline="")
+    src.write_text("".join(out_lines), encoding="utf-8", newline="")
 
-    print(f"Input:  {src}")
-    print(f"Output: {out_path}")
+    print(f"File:              {src}")
     print(f"G-records scanned: {g_scanned}")
-    print(f"Lines changed: {changed_lines}")
+    print(f"Lines changed:     {changed_lines}")
     print(f"RI shifts applied: {ri_count}")
-    print(f"M shifts applied: {m_count}")
+    print(f"M shifts applied:  {m_count}")
 
-    return out_path
+    return src
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Fix RI/M column left-shifts on ENSDF G-records and write .out file."
+        description="Fix RI/M column left-shifts on ENSDF G-records in-place."
     )
-    parser.add_argument("input", help="Input .ens file path or filename")
+    parser.add_argument(
+        "inputs",
+        nargs="+",
+        help="Input .ens file path(s), filename(s), or glob pattern(s)",
+    )
     args = parser.parse_args()
 
     script_dir = Path(__file__).resolve().parent
     workspace_root = script_dir.parent.parent
-    src = resolve_input(args.input, workspace_root)
-    process(src)
-    return 0
+    sources = resolve_inputs(args.inputs, workspace_root)
+
+    print(f"Matched files: {len(sources)}")
+
+    ok = 0
+    failed = 0
+    for src in sources:
+        try:
+            process(src)
+            ok += 1
+        except Exception as exc:
+            failed += 1
+            print(f"ERROR: {src}: {exc}")
+
+    print(f"Processed OK:      {ok}")
+    print(f"Processed failed:  {failed}")
+    return 0 if failed == 0 else 1
 
 
 if __name__ == "__main__":

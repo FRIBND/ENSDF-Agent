@@ -17,7 +17,7 @@ ENSDF L-Record Field Positions (Mandatory):
 
 Usage: 
   python column_calibrate.py "filename.ens"           # Complete ENSDF validation
-  python column_calibrate.py "filename.ens" --fix     # Validate and fix line lengths  
+  python column_calibrate.py "filename.ens" --fix     # Pads/trims data records to 80-character length
 
 ALWAYS CHECKS:
 - Line length compliance (80 characters for ALL record types: H, L, G, E, B, DP)
@@ -71,7 +71,12 @@ def is_data_record_line(line):
     """
     if len(line) < 8:
         return False
-    
+
+    # Exclude comment lines: col 7 (index 6) = lowercase 'c' followed by record-type letter.
+    # Example: ' 34CL cG ...' has line[6]='c', line[7]='G'. Must NOT be padded.
+    if line[6] == 'c' and len(line) > 7 and line[7].isalpha() and line[7].isupper():
+        return False
+
     # Check for record types in column 8 (0-based index 7)
     # H-records have H at column 8 (index 7)
     # L/G/E/B records have those letters at column 8
@@ -660,8 +665,11 @@ def validate_mul_field(filename):
     
     for line_num, line_content in enumerate(lines, 1):
         
-        # Only check G-records for MUL field validation
-        if len(line_content) < 10 or ' G ' not in line_content[6:10]:
+        # Only check primary G-records for MUL field validation
+        # Must have: CONT field blank (idx 5), col 7 blank (idx 6), 'G' at col 8 (idx 7), col 9 blank (idx 8)
+        if len(line_content) < 10:
+            continue
+        if line_content[5] != ' ' or line_content[6] != ' ' or line_content[7] != 'G' or line_content[8] != ' ':
             continue
         
         # Skip comment lines

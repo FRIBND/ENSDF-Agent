@@ -1,51 +1,73 @@
 ---
 name: l-transfer-comments-standardization
 description: >
-  Standardizes L-transfer phrases in ENSDF cL J$ comments when converting
-  legacy notation, cross-reaction discrepancies, or ambiguous same-reaction
-  notation. Preserves non-L-transfer J$ arguments and uses the comment-only
-  workflow without ruler or column validation.
+  Standardizes L-transfer phrases in ENSDF cL J$ comments. Use when deducing Jπ from L-transfers in XREF-identified reaction datasets using angular momentum coupling rules. Comment-only workflow; no ruler or column validation required.
 argument-hint: [ENSDF file or level energy]
 ---
 
 # ENSDF L-Transfer Comments Standardization
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, uncertainty notation, and spot-check policy: `.github/copilot-instructions.md`.
+ENSDF rules and column positions: `.github/copilot-instructions.md`.
+## Task Customization & Configuration
+
+> Fill in before starting task. Update as needed.
+
+### Files
+- Source: `[path to reaction dataset .ens file(s)]`
+- Target: `[path to adopted .ens file]`
+
+### Matching
+- L-records: `[ ]` exact E  `[ ]` E within ±[N] keV  `[ ]` XREF letter → dataset
+  If an XREF letter is followed by asterisk (*) or (energy*), it is usually not considered for Jπ assignment.
+
+### Operations
+- **Write/Update** cL J$ L-transfer phrase in adopted target
+- **Keep** all non-L-transfer J$ arguments unchanged
 
 ## Purpose
-Standardize only the L-transfer portion of cL J$ comments. Preserve all other J$ arguments exactly.
+Standardize only the L-transfer portion of cL J$ comments. Preserve all other J$ arguments exactly. Preserve all other existing comments.
 
-## Standard Formats
+## Workflow
 
-### One L Value
-**Format:** `L=VALUE from INITIAL_JPI in REACTION.`
-**Example:** `L=2 from 0+ in ({+3}He,|a).`
+1. Map each non-asterisk XREF letter to its reaction dataset.
+2. Read the L-transfer field (cols 56–64) from the matched source L-record. **Never** use old adopted comment text as the L value source.
+3. Run `python .github/scripts/angular_momentum_coupling.py Jπ_target Jπ_particle` to compute allowed Jπ for each L value.
+   > **Two-layer accuracy check:** (a) quoted L-value must match source cols 56–64 — never trust existing comment text; (b) deduced Jπ range must be correct per the script. L=A+B (simultaneous) requires AND intersection, not union. L=A,B (alternative) requires separate sub-clauses, and then the union of their Jπ results. Every L-transfer clause must include an explicit `gives <Jπ_results>`.
+4. Write standardized cL J$ comment, preserving all non-L-transfer arguments exactly.
+5. **Completeness:** Each non-asterisk XREF letter with non-blank L-field must appear in the cL J$ comment; angular momentum couplings yielding too many Jπ values may be omitted if other stronger constraints exist.
 
-### One L Value in Multiple Reactions
-**Format:** `L=VALUE from INITIAL_JPI in REACTION1, REACTION2, and REACTION3.`
-**Example:** `L=2 from 0+ in (p,d), (d,t), and ({+3}He,|a).`
+## Standard Comment Formats
 
-### Different L Values Across Reactions
-**Format:** `L=VALUE1 from INITIAL_JPI in REACTION1. Other: L=VALUE2 from INITIAL_JPI in REACTION2.`
-**Example:** `L=2 from 0+ in ({+3}He,|a). Other: L=3 from 0+ in (p,d).`
+### L values from reactions (period between each clause)
 
-### Ambiguous Multi-L in One Reaction
-**Preferred format:** `L=VALUE1+VALUE2 from INITIAL_JPI in REACTION: L=VALUE1 gives JPI_LIST1; L=VALUE2 gives JPI_LIST2.`
+L=<L1> from <Jπ_target1> in <reaction1> gives <Jπ_results1>. L=<L2> from <Jπ_target2> in <reaction2> gives <Jπ_results2>.
 
-**Example:** `L=0+2 from 3/2+ in ({+3}He,d): L=0 gives 1+,2+; L=2 gives 0+,1+,2+,3+,4+.`
+Append `for <E_level> {I<Unc>} level` after <Jπ_results> for possible doublets/multiplets that are indicated by aterisk in its XREF.
 
-### Cases with Additional Info
-**Format:** `L=VALUE from INITIAL_JPI in REACTION. Additional info.`
-**Example:** `L=2 from 0+ in (pol p,d) and L+1/2 transfer from analyzing power. L+1/2 transfer from J-dependence in (p,d).`
+### Multiple L values in one reaction (colon, semicolons between sub-clauses, final period)
+L=L1,L2 or L=L1+L2 or L=L1,L2+L3 is an inseparable list.
+L in parentheses indicates less firm L assignment due to data quality or less certain transfer reaction mechanism, e.g., (p,3He), (3He,p).
 
-## Rules
 
-- **Preservation:** Standardize only the L-transfer phrase. Keep all other J$ text, punctuation, and ordering unchanged.
-- **Uniformity:** Convert `L(p,d)=L(d,t)=2` to `L=2 from INITIAL_JPI in (p,d) and (d,t).`
-- **Cross-reaction rule:** Use `Other:` only when different reactions report different L values.
-- **Same-reaction ambiguity rule:** Do not collapse `L=1+3` or `L=0+2` into one combined Jπ list unless the source explicitly states an AND meaning. Use separate `gives` clauses.
-- **Initial State:** Always specify "from INITIAL_JPI" (e.g., from 0+).
-- **Reaction List:** Comma-separated list with "and" before the last item.
-- **Oxford Comma:** Use the Oxford comma.
-- **Max Line Length:** Keep within 80 columns. If needed, wrap to continuation lines (`2cL`, etc.).
-- **Validation Shortcut:** Skip ruler, column validation, and gamma-ordering checks. This skill applies to comment-only edits.
+cL J$L=<L1,L2> from <Jπ_target> in <reaction>: L=<L1> gives <Jπ_results1>; L=<L2> gives <Jπ_results2>.
+
+<Jπ_results> is the OR of {<Jπ_results1>; <Jπ_results2>}.
+
+cL J$L=<L1+L2> from <Jπ_target> in <reaction> gives <Jπ_results>.
+<Jπ_results> = AND intersection only. Never show individual sub-clauses for '+' simultaneous transfers.
+
+cL J$L=<L1+L2,L3> from <Jπ_target> in <reaction>: L=<L1+L2> gives <Jπ_results1AND2>; L=<L3> gives <Jπ_results3>.
+
+<Jπ_results> is the OR of {<Jπ_results1AND2>; <Jπ_results3>}.
+
+cL J$L=<L1+L2,L3+L4> from <Jπ_target> in <reaction>: L=<L1+L2> gives <Jπ_results1AND2>; L=<L3+L4> gives <Jπ_results3AND4>.
+
+<Jπ_results> is the OR of {<Jπ_results1AND2>; <Jπ_results3AND4>}.
+
+Final Jπ results that go to the Level-record J|p field usually take the AND of each <Jπ_results> from different datasets into account.
+
+
+### Analyzing power constraint
+From polarized-beam data: `L=<L> from <Jπ> in <pol reaction> with <L±1> transfer from analyzing power gives <Jπ_results>.`
+
+*Comment-only edits: skip ruler, column, and ordering validation.*

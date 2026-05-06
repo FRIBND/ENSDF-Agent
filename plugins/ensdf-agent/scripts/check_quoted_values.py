@@ -166,7 +166,10 @@ def parse_gammas(filepath: Path, *, debug: bool = False) -> List[Gamma]:
                     energy = float(e_str)
                 except ValueError:
                     continue
-                mul = line[32:41].strip() if len(line) > 41 else ''
+                if len(line) > 41 and line[31:32] != ' ':
+                    mul = line[31:41].strip()
+                else:
+                    mul = line[32:41].strip() if len(line) > 41 else ''
                 gammas.append(Gamma(energy, e_str, mul, current_level_energy, i))
                 if debug:
                     print(f"  G-rec line {i}: E={e_str}  M={mul!r}  parent={current_level_energy}")
@@ -197,10 +200,12 @@ def extract_quoted_refs(filepath: Path) -> List[QuotedRef]:
                 in_j_block = False
                 block_lines = []
             continue
+        col6 = line[5:6]
         col7 = line[6:7]
         col8 = line[7:8]
         nucid = line[0:5]
         is_cL = col7 == 'c' and col8 == 'L' and nucid.strip() != ''
+        is_continuation = col6 != ' '
         if is_cL:
             text = line[9:80] if len(line) >= 80 else line[9:].rstrip('\n')
             if 'J$' in text:
@@ -210,9 +215,13 @@ def extract_quoted_refs(filepath: Path) -> List[QuotedRef]:
                 in_j_block = True
                 block_lines = [text]
                 block_start = i
-            elif in_j_block:
+            elif in_j_block and is_continuation:
                 # Continuation of current J$ block
                 block_lines.append(text)
+            elif in_j_block:
+                flush_block()
+                in_j_block = False
+                block_lines = []
         else:
             if in_j_block:
                 flush_block()
@@ -227,48 +236,90 @@ def extract_quoted_refs(filepath: Path) -> List[QuotedRef]:
 
 def _parse_j_block(texts: List[str], start_line: int) -> List[QuotedRef]:
     """Parse a merged cL J$ text block into QuotedRef objects."""
-    full = ''.join(texts)
+    full = ' '.join(text.strip() for text in texts)
+    full = re.sub(r'\s+', ' ', full)
+    full = full.replace('ground state', 'g.s.')
+
     results: List[QuotedRef] = []
+    seen: set[Tuple[str, str, str, str, str]] = set()
 
-    # Pattern: [MULTIPOLARITY] ENERGY|g (from|to) JPI (LEVEL_ENERGY|g.s.)
-    pattern = (
-        r'(?:([A-Z0-9+\(\)\[\]]+)\s+)?'  # group 1: optional multipolarity at start
-        r'(\d+(?:\.\d+)?)\s*\|g'          # group 2: gamma energy (allow space before |g)
-        r'\s+'
-        r'(from|to)'                       # group 3: direction
-        r'\s+'
-        r'([^\s,;]+(?:\s*\([^\)]*\))?[^\s,;-]*)'  # group 4: J-pi
-        r'\s+'
-        r'(g\.s\.|(\d+(?:\.\d+)?))(?:-keV)?(?:\s+level)?'  # group 5: level (g.s. or number), group 6: numeric part
-    )
+    gamma_pattern = re.compile(r'(\d+(?:\.\d+)?)\|g(?:\(\|q\))?')
+    gamma_matches = list(gamma_pattern.finditer(full))
 
-    for m in re.finditer(pattern, full):
-        mul = m.group(1).strip() if m.group(1) else None
-        ge_str = m.group(2)
-        direction = m.group(3)
-        jpi = m.group(4).strip()
-        lev_capture = m.group(5)  # either "g.s." or the numeric string
-        if lev_capture == 'g.s.':
-            lev_str = 'g.s.'
-            lev_e = 0.0
-        else:
-            lev_str = lev_capture
-            lev_e = float(lev_capture)
-        
-        # Clean trailing artefacts
-        jpi = re.sub(r'[;,.]$', '', jpi)
+    def parse_target(text: str) -> Optional[Tuple[str, str, float]]:
+        text = text.lstrip(' ,;')
+
+        match = re.match(
+            r'(?P<jpi>.+?)\s*,?\s*(?P<level>g\.s\.)\b',
+            text,
+        )
+        if match:
+            return match.group('jpi').strip(' ,;'), 'g.s.', 0.0
+
+        match = re.match(
+            r'(?P<level>\d+(?:\.\d+)?)\s*,\s*(?P<jpi>[^;.]+' 
+            r'?)(?:\s+(?:level|resonance))?(?=$|[,;.]|\s+(?:and|but|which|in|rules|'
+            r'disfavors|favors|gives|based|from))',
+            text,
+        )
+        if match:
+            level_str = match.group('level')
+            return match.group('jpi').strip(' ,;'), level_str, float(level_str)
+
+        match = re.match(
+            r'(?P<jpi>.+?)\s*,\s*(?P<level>\d+(?:\.\d+)?)'
+            r'(?:\s+(?:level|resonance))?',
+            text,
+        )
+        if match:
+            level_str = match.group('level')
+            return match.group('jpi').strip(' ,;'), level_str, float(level_str)
+
+        return None
+
+    for index, gamma_match in enumerate(gamma_matches):
+        ge_str = gamma_match.group(1)
+        next_start = gamma_matches[index + 1].start() if index + 1 < len(gamma_matches) else len(full)
+        span = full[gamma_match.end():next_start]
+        direction_match = re.search(r'\b(to|from)\b', span)
+        if not direction_match:
+            continue
+
+        direction = direction_match.group(1)
+        between = span[:direction_match.start()]
+        after_direction = span[direction_match.end():]
+
+        target = parse_target(after_direction)
+        if target is None:
+            continue
+
+        jpi, level_str, level_energy = target
+
+        multipolarity: Optional[str] = None
+        cleaned_between = between.replace('(|q)', ' ').strip(' ,;')
+        if cleaned_between:
+            token = cleaned_between.split(',', 1)[0].strip()
+            if token and token not in {'DJ', 'RUL'} and not token.startswith('|DJ='):
+                multipolarity = token
+
+        context = full[gamma_match.start():next_start].strip(' ,;')
+        key = (ge_str, direction, jpi, level_str, context)
+        if key in seen:
+            continue
+        seen.add(key)
 
         results.append(QuotedRef(
             gamma_energy_str=ge_str,
             gamma_energy=float(ge_str),
-            multipolarity=mul,
+            multipolarity=multipolarity,
             direction=direction,
-            level_energy_str=lev_str,
-            level_energy=lev_e,
+            level_energy_str=level_str,
+            level_energy=level_energy,
             jpi=jpi,
             line_num=start_line,
-            context=m.group(0),
+            context=context,
         ))
+
     return results
 
 
