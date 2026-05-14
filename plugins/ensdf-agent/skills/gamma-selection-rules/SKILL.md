@@ -12,7 +12,7 @@ argument-hint: [feeding Jπ list] [deexciting transitions] [lifetime known?]
 
 # Gamma Transition Selection Rules — Practical Workflow: Combining Jπ Constraints Logic
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, uncertainty notation, and spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 γ-ray multipolarity selection rules: `.github/docs/gamma_selection_rules.md`.
 
@@ -127,7 +127,8 @@ Adopted: (1/2,3/2)
 
 When writing primary transition lists in `cL J$` comments:
 
-1. **Exclude LT gamma, ? gamma, and weak gamma** — Do not use γ rays with an upper-limit intensity (LT in the DRI field) or questionable placement (? in column 80) for Jπ deduction. Avoid using weak γ rays (e.g., <5% intensity) unless the user specifically requests.
-2. **Rank by final-level spin** — List transitions in ascending order of the final-level spin (smallest Jπ first, e.g., 0+, 1+, 3+, 4+).
-3. **Oxford comma** — Use Oxford comma style in multi-transition lists (e.g., "5805|g to 0+, g.s., 5344|g to 1+, 461, 5659|g to 3+, 146, and 3430|g to 4+, 2376 give (2+).").
-4. **Example** — "<E_gamma1>|g to <Jπ1>, g.s., <E_gamma2>|g to <Jπ2>, <E_level2>, and <E_gamma3>|g to <Jπ3>, <E_level3>."
+1. For primary transitions used to deduce Jπ of a level, do not use weak γ rays (Iγ < 5), γ rays with upper-limit intensity (`LT` in the `DRI` field), γ rays with questionable placement (`?` in col 80), or γ rays to final levels with uncertain or multi-valued Jπ.
+2. List transitions in descending order of intensity, with the strongest first, to reflect the most probable deexcitation paths. If there are γ transitions to final levels with the same Jπ, include only the strongest one for that Jπ, as this is sufficient for Jπ deduction.
+3. Example for one γ transition: `cL J$primary transition <E_gamma1>|g to <Jπ1> g.s.`
+4. Example for multiple γ transitions: `cL J$primary transitions: <E_gamma1>|g to <Jπ1> g.s., <E_gamma2>|g to <Jπ2>, <E_level2>, and <E_gamma3>|g to <Jπ3>, <E_level3>.` Or, with specified intensities: `cL J$primary transitions with I|g>10: <E_gamma1>|g to <Jπ1> <E_level1> and <E_gamma2>|g to <Jπ2>, <E_level2>.` Or, with specified multipolarities: `cL J$primary transitions: <E_gamma1>|g, D(+Q), to <Jπ1>, <E_level1> and <E_gamma2>|g, D(+Q), to <Jπ2>, <E_level2>.`
+5. Use Oxford comma style in multi-transition lists and keep existing other Jπ arguments. Example: `cL J$spin=1:4 from |g(|q) in {+33}S(p,|g). Primary transitions: 4328.7|g to 2+, 2157.9 level, 6486.2|g to 0+ g.s., and 6025.3|g to 1+, 461.01 level.`

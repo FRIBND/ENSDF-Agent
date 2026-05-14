@@ -9,7 +9,7 @@ argument-hint: [adopted.ens] [add|remove] [dataset-label]
 
 # Update ENSDF Cross-Reference (XREF) Labels
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, uncertainty notation, and spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 ## Scenario 1: Add Dataset
 
@@ -46,6 +46,29 @@ Apply mapping; delete removed label if present:
 - `XREF=ABC` → `XREF=AB` (B removed; C→B)
 - `XREF=ACD` → `XREF=ABC` (no B; C→B, D→C)
 - `XREF=ACDEF(2420)GIK` → `XREF=ABCDE(2420)FHJ` (notations travel with labels)
+
+## Scenario 3: Swap Two Adjacent Dataset Labels (e.g., G↔H)
+
+**Key insight:** A bidirectional swap requires care — lines containing **both** labels are textually unchanged after the swap (set {G,H} → {H,G} = {G,H} in sorted order). Only lines containing one label but not the other need text changes.
+
+### Steps
+
+#### 1. Update X-Records
+Swap the dataset descriptions on the two X-record lines (labels XG/XH stay; only the text content swaps).
+
+#### 2. Identify XREF Lines That Actually Change
+- **Both labels present** (e.g., `XREF=...GH...`): **no change needed** — sorted result is identical.
+- **Only one label present** (e.g., `XREF=...G...` without H): change that label to its swap partner.
+- Parenthetical notations `(energy)`, `(*)`, `(?)` travel with their label.
+
+#### 3. Apply Changes
+Example (swapping G↔H):
+- `XREF=ACDEFGHIJK` → unchanged (both present)
+- `XREF=ACDEF(2420)GIK` → `XREF=ACDEF(2420)HIK` (G→H, H absent)
+- `XREF=ACEG(4474)JK` → `XREF=ACEH(4474)JK` (G→H, H absent)
+- `XREF=FG(7520*)` → `XREF=FH(7520*)` (G→H, H absent)
+
+**NEVER** apply G→H then H→G in two passes — this creates double-shifting. Identify all changes first, then apply atomically.
 
 ## Validation
 Skip column calibrate and line ruler checks. Pad XREF line to 80 chars only.

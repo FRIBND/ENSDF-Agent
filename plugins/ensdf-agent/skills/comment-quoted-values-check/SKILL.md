@@ -12,7 +12,7 @@ argument-hint: [adopted.ens]
 
 # Comment Quoted Values Cross-Check
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, uncertainty notation, and spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 ## Purpose
 
@@ -27,7 +27,7 @@ Cross-check all quoted values in `cL J$` comments against corresponding L-record
 ---
 
 ## ENSDF Record Reference
-Be sure to follow the **Integral Understanding of Continuation Records and Comments (Column 6)** specified in `.github/copilot-instructions.md`.
+Be sure to follow the **Integral Understanding of Continuation Records and Comments (Column 6)** specified in `.github/agents/ENSDF-Agent.agent.md`.
 
 ### L-Record Fields Used
 
@@ -128,6 +128,7 @@ For each discrepancy:
 2. Determine whether the comment or the data record is the source of truth
 3. If comment is wrong → fix comment (Step 3)
 4. If data record is wrong → flag for separate handling (do NOT fix in this workflow)
+5. Update and debug the script only if needed to handle edge cases. Keep the script simple, straightforward, and robust.
 
 ### Step 3: Correct Comments
 
