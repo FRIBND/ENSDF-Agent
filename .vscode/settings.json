@@ -2,16 +2,5 @@
   "chat.plugins.enabled": true,
   "chat.plugins.marketplaces": [
     "FRIBND/ENSDF-Agent"
-  ],
-  "extraKnownMarketplaces": {
-    "ensdf-agent": {
-      "source": {
-        "source": "github",
-        "repo": "FRIBND/ENSDF-Agent"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "ensdf-agent@ensdf-agent": true
-  }
+  ]
 }

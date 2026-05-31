@@ -12,7 +12,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 ## Development Timeline
 
 - 2026-05-07: ENSDF-Agent was refined for improved token efficiency and robust, operational use in real-world ENSDF evaluation workflows.
-- 2026-03-25: ENSDF-Agent Version 0.0.1, with 2 Agent Hooks and 24 Agent Skills, was released as an Agent Plugin via the Microsoft VS Code Plugin Marketplace.
+- 2026-03-25: ENSDF-Agent Version 0.0.1, with 3 Agent Hooks and 24 Agent Skills, was released as an Agent Plugin via the Microsoft VS Code Plugin Marketplace.
 - 2026-03-04: ENSDF-Agent became available as an open-source repository at [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/ENSDF-Agent).
 - 2026-02-23: Agent Skills were introduced as modular, portable capabilities that can be dynamically loaded into ENSDF-Agent to perform specific tasks within ENSDF workflows.
 - 2025-11-14: The FRIBND Custom Agent Chat Mode was upgraded to ENSDF AI Agent.
@@ -28,13 +28,21 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
    - Alternatively, select the **More Actions** (three dots) icon in the Extensions sidebar and choose **Views** > **Agent Plugins**.
 3. Click **Install** to install the ENSDF-Agent Plugin in your user profile.
 
-## Caveats
+## Hooks
 
-As of 2026-03-26:
+Three hooks enforce safety and data integrity. All fire automatically — no configuration required after installation.
+
+| Hook | Event | Action |
+|------|-------|--------|
+| `block-root-file-creation` | PreToolUse | Denies `create_file` targeting workspace root, mass-chain dirs (`A<N>/`), or `XUNDL/` |
+| `block-git-revert` | PreToolUse | Denies `git restore`/`git checkout` on `.ens` files or non-temp paths |
+| `validate_ens` | PostToolUse | Runs `ensdf_1line_ruler.py` on every edited `.ens` file; blocks on column violations |
+
+## Caveats
 
 - VS Code does not support installing Agent Plugins in a specific workspace.
 - VS Code Agent Plugins do not support workspace-level `copilot-instructions.md` shipped with the plugin.
-- VS Code Agent Plugins do not support Agent-scoped hooks.
+- VS Code Agent Plugins do not support agent-scoped hooks; plugin hooks fire for any active agent while the plugin is enabled.
 - Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
 
 ## Disclaimer and Usage Notice
@@ -54,3 +62,45 @@ Contact: nucleardata@frib.msu.edu
 ## License
 
 MIT
+
+
+#### ENSDF-Agent Architecture
+<img width="2752" height="1536" alt="Architecture" src="https://github.com/user-attachments/assets/63ee8a24-89d5-45df-b60e-237094add77f" />
+
+
+## Maintainer Sync
+
+Run from the repo root before every `git push` to publish a new release:
+
+```powershell
+.\sync-plugin-from-local-agent.ps1
+```
+
+This single command does everything in order:
+1. Bumps the patch version across all manifest files (`0.1.1` → `0.1.2`, etc.)
+2. Copies `README.md` from the repo root into the plugin payload
+3. Syncs all changed files from `D:\X\ND\ENSDF\.github` into `plugins/ensdf-agent/`
+
+**Options** (rarely needed):
+
+| Flag | Effect |
+|------|--------|
+| `-DryRun` | Preview all actions — no files are changed |
+| `-NoBump` | Skip version bump, sync files only |
+| `-Bump minor` | Bump minor version instead of patch (`0.1.x` → `0.2.0`) |
+| `-Bump major` | Bump major version (`0.x.y` → `1.0.0`) |
+
+Python equivalent (same flags, lowercase with `--`):
+
+```powershell
+python .\sync_plugin_from_local_agent.py
+python .\sync_plugin_from_local_agent.py --dry-run
+python .\sync_plugin_from_local_agent.py --no-bump
+python .\sync_plugin_from_local_agent.py --bump minor
+```
+
+**What is synced:** `agents/`, `copilot-instructions.md`, `hooks/`, `prompts/`, `scripts/`, `skills/`, `README.md`
+
+**What is never overwritten:** `.claude-plugin/plugin.json`, `hooks/hooks.json`, `agents/ENSDF-Agent.agent.md`
+
+**What is never copied from source:** `hooks/block-root-file-creation.json` (workspace-only hook)

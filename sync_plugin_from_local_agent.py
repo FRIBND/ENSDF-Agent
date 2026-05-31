@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import shutil
 from pathlib import Path
 
@@ -22,11 +23,52 @@ EXCLUDED_SEGMENTS = {
 }
 
 PRESERVED_PLUGIN_FILES = {
-    Path("README.md"),
-    Path("plugin.json"),
-    Path("hooks.json"),
-    Path("hooks/scripts/block_git_revert.py"),
+    Path(".claude-plugin/plugin.json"),
+    Path("hooks/hooks.json"),
+    Path("agents/ENSDF-Agent.agent.md"),
 }
+
+# Files in the source .github tree that are workspace-only and must not be copied to the plugin
+SOURCE_EXCLUDED_FILES = {
+    Path("hooks/block-root-file-creation.json"),
+}
+
+# JSON files that carry the plugin version — updated by bump_versions()
+VERSION_FILES = [
+    Path("plugins/ensdf-agent/.claude-plugin/plugin.json"),  # canonical source
+    Path(".claude-plugin/marketplace.json"),
+    Path(".github/plugin/marketplace.json"),
+]
+
+
+def bump_versions(repo_root: Path, bump: str, dry_run: bool) -> None:
+    """Bump the semantic version across all VERSION_FILES using the first file as canonical."""
+    canonical = repo_root / VERSION_FILES[0]
+    text = canonical.read_text(encoding="utf-8")
+    match = re.search(r'"version"\s*:\s*"(\d+\.\d+\.\d+)"', text)
+    if not match:
+        raise ValueError(f"Cannot find version field in {canonical}")
+    old = match.group(1)
+    major, minor, patch = (int(x) for x in old.split("."))
+    if bump == "major":
+        major, minor, patch = major + 1, 0, 0
+    elif bump == "minor":
+        major, minor, patch = major, minor + 1, 0
+    else:
+        patch += 1
+    new = f"{major}.{minor}.{patch}"
+
+    print(f"Version bump ({bump}): {old} → {new}")
+    for rel in VERSION_FILES:
+        label = rel.as_posix()
+        if dry_run:
+            print(f"  WOULD UPDATE {label}")
+        else:
+            path = repo_root / rel
+            updated = re.sub(r'"version"\s*:\s*"[^"]*"', f'"version": "{new}"', path.read_text(encoding="utf-8"))
+            path.write_text(updated, encoding="utf-8")
+            print(f"  UPDATED {label}")
+    print()
 
 
 def normalize_relative_path(path: Path | str) -> Path:
@@ -107,6 +149,23 @@ def collect_excluded_directories(root: Path) -> list[Path]:
     return sorted(set(directories), reverse=True)
 
 
+def sync_readme(repo_root: Path, plugin_root: Path, dry_run: bool) -> None:
+    """Copy repo-root README.md into the plugin payload directory."""
+    source = repo_root / "README.md"
+    target = plugin_root / "README.md"
+    if not source.is_file():
+        print("SKIP   README.md (source not found)")
+        return
+    if target.is_file() and sha256sum(source) == sha256sum(target):
+        print("SKIP   README.md")
+        return
+    if dry_run:
+        print("COPY   README.md")
+    else:
+        shutil.copy2(source, target)
+        print("COPIED README.md")
+
+
 def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
     if not source_root.is_dir():
         raise FileNotFoundError(f"Source .github path not found: {source_root}")
@@ -122,6 +181,10 @@ def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
     skipped = 0
 
     for relative in source_files:
+        if relative in PRESERVED_PLUGIN_FILES or relative in SOURCE_EXCLUDED_FILES:
+            print(f"SKIP   {relative.as_posix()} (preserved/excluded)")
+            skipped += 1
+            continue
         source_path = source_root / relative
         target_path = plugin_root / relative
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,6 +263,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Preview copy/remove actions without changing files.",
     )
+    parser.add_argument(
+        "--bump",
+        choices=["patch", "minor", "major"],
+        default="patch",
+        metavar="LEVEL",
+        help="Version bump level applied before syncing: patch (default), minor, or major.",
+    )
+    parser.add_argument(
+        "--no-bump",
+        action="store_true",
+        help="Skip version bumping.",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=str(Path(__file__).resolve().parent),
+        help="Repository root used for README sync and version bumping (default: script directory).",
+    )
     return parser.parse_args()
 
 
@@ -207,6 +287,10 @@ def main() -> int:
     args = parse_args()
     source_root = Path(args.source_github_path).resolve()
     plugin_root = Path(args.plugin_root).resolve()
+    repo_root = Path(args.repo_root).resolve()
+    if not args.no_bump:
+        bump_versions(repo_root, args.bump, args.dry_run)
+    sync_readme(repo_root, plugin_root, args.dry_run)
     return sync(source_root, plugin_root, args.dry_run)
 
 

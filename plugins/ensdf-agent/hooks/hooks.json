@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/block-root-file-creation.py\"",
+        "windows": "powershell -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/block-root-file-creation.ps1\"",
+        "timeout": 10
+      },
+      {
+        "type": "command",
+        "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/block-git-revert.py\"",
+        "windows": "powershell -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/block-git-revert.ps1\"",
+        "timeout": 10
+      }
+    ],
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate_ens.py\"",
+        "timeout": 30
+      }
+    ]
+  }
+}

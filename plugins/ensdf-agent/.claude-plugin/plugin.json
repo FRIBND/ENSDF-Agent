@@ -1,7 +1,7 @@
-{
+﻿{
   "name": "ensdf-agent",
-  "version": "0.1.0",
-  "description": "ENSDF-Agent",
+  "version": "0.1.3",
+  "description": "ENSDF-Agent for nuclear data evaluation",
   "author": {
     "name": "FRIB Nuclear Data Group"
   },
@@ -17,6 +17,5 @@
         "nuclear-data-evaluation"
   ],
   "agents": "./agents",
-  "skills": "./skills",
-  "hooks": "./hooks.json"
+  "skills": "./skills"
 }

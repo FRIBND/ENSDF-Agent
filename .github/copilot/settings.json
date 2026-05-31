@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "ensdf-agent": {
+      "source": {
+        "source": "github",
+        "repo": "FRIBND/ENSDF-Agent"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ensdf-agent@ensdf-agent": true
+  }
+}

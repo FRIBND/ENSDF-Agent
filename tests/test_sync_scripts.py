@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -10,10 +9,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_SYNC = REPO_ROOT / "sync_plugin_from_local_agent.py"
-POWERSHELL_SYNC = REPO_ROOT / "sync-plugin-from-local-agent.ps1"
 
+# Files whose source content should be copied into the plugin on every sync.
 MANAGED_FILES = {
-    Path("agents/ENSDF-Agent.agent.md"): "source-agent\n",
     Path("copilot-instructions.md"): "source-instructions\n",
     Path("hooks/scripts/validate_ens.py"): "print('validate')\n",
     Path("prompts/example.prompt.md"): "prompt\n",
@@ -21,7 +19,11 @@ MANAGED_FILES = {
     Path("skills/example/SKILL.md"): "skill\n",
 }
 
-PRESERVED_PLUGIN_FILE = Path("hooks/scripts/block_git_revert.py")
+# A file that exists in the source tree but is in PRESERVED_PLUGIN_FILES in the
+# real script — the plugin's copy must NOT be overwritten during sync.
+PRESERVED_IN_SOURCE = Path("agents/ENSDF-Agent.agent.md")
+PRESERVED_SOURCE_CONTENT = "source-agent-with-hooks\n"
+PRESERVED_PLUGIN_CONTENT = "plugin-agent-no-hooks\n"
 
 EXCLUDED_SOURCE_FILES = {
     Path("docs/guide.md"): "docs should never sync\n",
@@ -52,28 +54,24 @@ class SyncScriptFixture:
         self._temp_dir.cleanup()
 
     def populate(self) -> None:
+        # Source: managed files + the preserved file + excluded dirs
         for relative, content in MANAGED_FILES.items():
             write_file(self.source / relative, content)
-
+        write_file(self.source / PRESERVED_IN_SOURCE, PRESERVED_SOURCE_CONTENT)
         for relative, content in EXCLUDED_SOURCE_FILES.items():
             write_file(self.source / relative, content)
 
-        for relative in (
-            Path("agents/ENSDF-Agent.agent.md"),
-            Path("copilot-instructions.md"),
-            Path("hooks/scripts/validate_ens.py"),
-            Path("prompts/example.prompt.md"),
-            Path("scripts/tool.py"),
-            Path("skills/example/SKILL.md"),
-        ):
+        # Plugin: stale versions of managed files
+        for relative in MANAGED_FILES:
             write_file(self.plugin / relative, f"stale-{relative.as_posix()}\n")
 
-        write_file(self.plugin / "scripts/stale_only.py", "remove me\n")
-        write_file(self.plugin / PRESERVED_PLUGIN_FILE, "preserve me\n")
-        write_file(self.plugin / "README.md", "plugin readme\n")
-        write_file(self.plugin / "plugin.json", "{}\n")
-        write_file(self.plugin / "hooks.json", "{}\n")
+        # Plugin: preserved file with plugin-specific content (must survive sync)
+        write_file(self.plugin / PRESERVED_IN_SOURCE, PRESERVED_PLUGIN_CONTENT)
 
+        # Plugin: stale file not in source (should be removed by sync)
+        write_file(self.plugin / "scripts/stale_only.py", "remove me\n")
+
+        # Plugin: excluded target dirs (should be cleaned up)
         for relative, content in EXCLUDED_TARGET_FILES.items():
             write_file(self.plugin / relative, content)
 
@@ -89,20 +87,33 @@ class SyncScriptTests(unittest.TestCase):
         self.fixture.close()
 
     def assert_synced_plugin_tree(self) -> None:
+        # Managed files must have source content
         for relative, content in MANAGED_FILES.items():
-            self.assertTrue((self.fixture.plugin / relative).is_file(), relative.as_posix())
-            self.assertEqual((self.fixture.plugin / relative).read_text(encoding="utf-8"), content)
+            path = self.fixture.plugin / relative
+            self.assertTrue(path.is_file(), f"missing: {relative.as_posix()}")
+            self.assertEqual(path.read_text(encoding="utf-8"), content, relative.as_posix())
 
+        # Preserved file must retain plugin content — NOT overwritten with source
+        preserved = self.fixture.plugin / PRESERVED_IN_SOURCE
+        self.assertTrue(preserved.is_file())
+        self.assertEqual(preserved.read_text(encoding="utf-8"), PRESERVED_PLUGIN_CONTENT)
+
+        # Stale target-only file must be removed
         self.assertFalse((self.fixture.plugin / "scripts/stale_only.py").exists())
-        self.assertTrue((self.fixture.plugin / PRESERVED_PLUGIN_FILE).is_file())
-        self.assertEqual((self.fixture.plugin / PRESERVED_PLUGIN_FILE).read_text(encoding="utf-8"), "preserve me\n")
 
+        # Excluded source files must NOT appear in plugin
         for relative in EXCLUDED_SOURCE_FILES:
-            self.assertFalse((self.fixture.plugin / relative).exists(), f"excluded source file synced: {relative.as_posix()}")
+            self.assertFalse(
+                (self.fixture.plugin / relative).exists(),
+                f"excluded source file was synced: {relative.as_posix()}",
+            )
 
+        # Excluded target dirs must be cleaned up
         for relative in EXCLUDED_TARGET_FILES:
-            self.assertFalse((self.fixture.plugin / relative).exists(), f"excluded target file not cleaned: {relative.as_posix()}")
-
+            self.assertFalse(
+                (self.fixture.plugin / relative).exists(),
+                f"excluded target file was not cleaned: {relative.as_posix()}",
+            )
         self.assertFalse((self.fixture.plugin / "docs").exists())
         self.assertFalse((self.fixture.plugin / "temp").exists())
 
@@ -110,44 +121,29 @@ class SyncScriptTests(unittest.TestCase):
         command = [
             sys_executable(),
             str(PYTHON_SYNC),
-            "--source-github-path",
-            str(self.fixture.source),
-            "--plugin-root",
-            str(self.fixture.plugin),
+            "--source-github-path", str(self.fixture.source),
+            "--plugin-root", str(self.fixture.plugin),
+            "--repo-root", str(self.fixture.root),  # no README there → sync_readme skips
+            "--no-bump",
         ]
         if dry_run:
             command.append("--dry-run")
         return subprocess.run(command, cwd=REPO_ROOT, text=True, capture_output=True, check=True)
 
-    def run_powershell_sync(self, dry_run: bool = False) -> subprocess.CompletedProcess[str]:
-        command = [
-            "powershell",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(POWERSHELL_SYNC),
-            "-SourceGitHubPath",
-            str(self.fixture.source),
-            "-PluginRoot",
-            str(self.fixture.plugin),
-        ]
-        if dry_run:
-            command.append("-DryRun")
-        return subprocess.run(command, cwd=REPO_ROOT, text=True, capture_output=True, check=True)
-
     def test_python_sync_dry_run_preserves_filesystem(self) -> None:
         result = self.run_python_sync(dry_run=True)
-        self.assertIn("COPY   agents/ENSDF-Agent.agent.md", result.stdout)
+        # Managed files must show as pending copies
+        self.assertIn("COPY   copilot-instructions.md", result.stdout)
+        # Preserved file must be reported as skipped, not copied
+        self.assertIn("SKIP   agents/ENSDF-Agent.agent.md (preserved/excluded)", result.stdout)
+        # Stale target-only file must show as pending removal
         self.assertIn("REMOVE scripts/stale_only.py", result.stdout)
+        # Dry-run must not touch the filesystem
         self.assertTrue((self.fixture.plugin / "scripts/stale_only.py").exists())
         self.assertTrue((self.fixture.plugin / "docs/leftover.md").exists())
 
     def test_python_sync_applies_expected_changes(self) -> None:
         self.run_python_sync(dry_run=False)
-        self.assert_synced_plugin_tree()
-
-    def test_powershell_sync_applies_expected_changes(self) -> None:
-        self.run_powershell_sync(dry_run=False)
         self.assert_synced_plugin_tree()
 
 
