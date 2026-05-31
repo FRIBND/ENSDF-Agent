@@ -70,37 +70,22 @@ MIT
 
 ## Maintainer Sync
 
-Run from the repo root before every `git push` to publish a new release:
-
-```powershell
-.\sync-plugin-from-local-agent.ps1
-```
-
-This single command does everything in order:
-1. Bumps the patch version across all manifest files (`0.1.1` → `0.1.2`, etc.)
-2. Copies `README.md` from the repo root into the plugin payload
-3. Syncs all changed files from `D:\X\ND\ENSDF\.github` into `plugins/ensdf-agent/`
-
-**Options** (rarely needed):
-
-| Flag | Effect |
-|------|--------|
-| `-DryRun` | Preview all actions — no files are changed |
-| `-NoBump` | Skip version bump, sync files only |
-| `-Bump minor` | Bump minor version instead of patch (`0.1.x` → `0.2.0`) |
-| `-Bump major` | Bump major version (`0.x.y` → `1.0.0`) |
-
-Python equivalent (same flags, lowercase with `--`):
+Run before every `git push`:
 
 ```powershell
 python .\sync_plugin_from_local_agent.py
-python .\sync_plugin_from_local_agent.py --dry-run
-python .\sync_plugin_from_local_agent.py --no-bump
-python .\sync_plugin_from_local_agent.py --bump minor
 ```
 
-**What is synced:** `agents/`, `copilot-instructions.md`, `hooks/`, `prompts/`, `scripts/`, `skills/`, `README.md`
+Bumps the version, copies `README.md`, and syncs all changed files from `D:\X\ND\ENSDF\.github` into `plugins/ensdf-agent/`.
 
-**What is never overwritten:** `.claude-plugin/plugin.json`, `hooks/hooks.json`, `agents/ENSDF-Agent.agent.md`
+To preview without making any changes:
 
-**What is never copied from source:** `hooks/block-root-file-creation.json` (workspace-only hook)
+```powershell
+python .\sync_plugin_from_local_agent.py --dry-run
+```
+
+To sync without bumping the version:
+
+```powershell
+python .\sync_plugin_from_local_agent.py --no-bump
+```
