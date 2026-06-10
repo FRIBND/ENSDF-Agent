@@ -45,6 +45,13 @@ Three hooks enforce safety and data integrity. All fire automatically — no con
 - VS Code Agent Plugins do not support agent-scoped hooks; plugin hooks fire for any active agent while the plugin is enabled.
 - Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
 
+
+- VS Code extension-contributed agents and skills will negatively impact the user experience of the ENSDF-Agent. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the chat menu.
+
+Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable:
+Click the Gear icon (Manage) directly on the extension list item.
+Select Disable (Workspace) from the dropdown menu.
+
 ## Disclaimer and Usage Notice
 
 ENSDF-Agent is designed to assist in nuclear data evaluation, not a substitute for human evaluators. It does not possess true understanding or expertise in nuclear physics.
