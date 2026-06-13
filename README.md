@@ -75,24 +75,3 @@ MIT
 <img width="2752" height="1536" alt="Architecture" src="https://github.com/user-attachments/assets/63ee8a24-89d5-45df-b60e-237094add77f" />
 
 
-## Maintainer Sync
-
-Run before every `git push`:
-
-```powershell
-python .\sync_plugin_from_local_agent.py
-```
-
-Bumps the version, copies `README.md`, and syncs all changed files from `D:\X\ND\ENSDF\.github` into `plugins/ensdf-agent/`.
-
-To preview without making any changes:
-
-```powershell
-python .\sync_plugin_from_local_agent.py --dry-run
-```
-
-To sync without bumping the version:
-
-```powershell
-python .\sync_plugin_from_local_agent.py --no-bump
-```

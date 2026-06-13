@@ -42,7 +42,7 @@ VERSION_FILES = [
 
 
 def bump_versions(repo_root: Path, bump: str, dry_run: bool) -> None:
-    """Bump the semantic version across all VERSION_FILES using the first file as canonical."""
+    """Bump the plugin version using single-digit patch rollover."""
     canonical = repo_root / VERSION_FILES[0]
     text = canonical.read_text(encoding="utf-8")
     match = re.search(r'"version"\s*:\s*"(\d+\.\d+\.\d+)"', text)
@@ -50,12 +50,20 @@ def bump_versions(repo_root: Path, bump: str, dry_run: bool) -> None:
         raise ValueError(f"Cannot find version field in {canonical}")
     old = match.group(1)
     major, minor, patch = (int(x) for x in old.split("."))
+
     if bump == "major":
-        major, minor, patch = major + 1, 0, 0
+        major += 1
+        minor = 0
+        patch = 0
     elif bump == "minor":
-        major, minor, patch = major, minor + 1, 0
+        minor += 1
+        patch = 0
     else:
         patch += 1
+        if patch >= 10:
+            minor += 1
+            patch = 0
+
     new = f"{major}.{minor}.{patch}"
 
     print(f"Version bump ({bump}): {old} → {new}")
@@ -251,11 +259,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source-github-path",
         default=r"D:\X\ND\ENSDF\.github",
-        help="Path to the local agent .github directory.",
+        help="Path to the local ENSDF .github directory used as the sync source.",
     )
     parser.add_argument(
         "--plugin-root",
-        default=str(Path(__file__).resolve().parent / "plugins" / "ensdf-agent"),
+        default=str(Path(__file__).resolve().parents[1] / "plugins" / "ensdf-agent"),
         help="Path to the plugin payload root.",
     )
     parser.add_argument(
@@ -277,8 +285,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--repo-root",
-        default=str(Path(__file__).resolve().parent),
-        help="Repository root used for README sync and version bumping (default: script directory).",
+        default=str(Path(__file__).resolve().parents[1]),
+        help="Repository root used for README sync and version bumping (default: repo root).",
     )
     return parser.parse_args()
 
