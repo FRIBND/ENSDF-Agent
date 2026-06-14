@@ -32,11 +32,11 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 Three hooks enforce safety and data integrity. All fire automatically — no configuration required after installation.
 
-| Hook | Event | Action |
-|------|-------|--------|
-| `block-root-file-creation` | PreToolUse | Denies `create_file` targeting workspace root, mass-chain dirs (`A<N>/`), or `XUNDL/` |
-| `block-git-revert` | PreToolUse | Denies `git restore`/`git checkout` on `.ens` files or non-temp paths |
-| `validate_ens` | PostToolUse | Runs `ensdf_1line_ruler.py` on every edited `.ens` file; blocks on column violations |
+| Hook | Level | Event | What it blocks/checks |
+|------|-------|-------|----------------------|
+| `block-root-file-creation` | workspace | PreToolUse | Denies `create_file` targeting workspace root, mass-chain dirs (`A<N>/`), or `XUNDL/`; forces temp files to `.github/temp/` |
+| `block-git-revert` | agent | PreToolUse | Denies `git restore`/`git checkout` on `.ens` files or non-temp paths; preserves VS Code diff viewer for human review |
+| `validate_ens` | agent | PostToolUse | Two-pass validation after every `.ens` edit: **PASS 1** (always) — ASCII-only check, blocks non-ASCII chars; **PASS 2** (data records only) — 80-column ruler via `ensdf_1line_ruler.py`, skipped for comment-only edits |
 
 ## Caveats
 
