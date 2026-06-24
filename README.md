@@ -11,7 +11,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Development Timeline
 
-- 2026-05-07: ENSDF-Agent was refined for improved token efficiency and robust, operational use in real-world ENSDF evaluation workflows.
+- 2026-05-07: ENSDF-Agent was refined for improved token efficiency and robust, operational use in real-world ENSDF evaluation workflows. Input tokens are <30,000 in a model turn without datasets.
 - 2026-03-25: ENSDF-Agent Version 0.0.1, with 3 Agent Hooks and 24 Agent Skills, was released as an Agent Plugin via the Microsoft VS Code Plugin Marketplace.
 - 2026-03-04: ENSDF-Agent became available as an open-source repository at [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/ENSDF-Agent).
 - 2026-02-23: Agent Skills were introduced as modular, portable capabilities that can be dynamically loaded into ENSDF-Agent to perform specific tasks within ENSDF workflows.
