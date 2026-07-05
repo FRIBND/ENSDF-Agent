@@ -1,3 +1,34 @@
+"""
+Regenerates the plugins/ensdf-agent/ payload from the local ENSDF workspace
+(default source: D:/X/ND/ENSDF/.github).
+
+Run order, see main():
+  1. bump_versions()   - bump the version string in every file in version_files.
+  2. sync_readme()     - copy repo-root README.md into the plugin if it changed.
+  3. sync_agent_file() - rebuild agents/ENSDF-Agent.agent.md from two source
+                         files: agents/ENSDF-Agent.agent.md (its `hooks:`
+                         frontmatter is stripped, since VS Code Agent Plugins
+                         don't support agent-scoped hooks - see hooks/hooks.json
+                         instead) and copilot-instructions.md, appended as a
+                         labeled section (it can't ship on its own). The output
+                         is fully rebuilt every run from whatever is currently
+                         on disk, so any edit to either source file is picked
+                         up on the next sync. See build_merged_agent_content().
+  4. sync()            - mirror-copy the rest of managed_entries (hooks/,
+                         prompts/, scripts/, skills/): copy new/changed files,
+                         remove files whose source no longer exists, skip
+                         unchanged/preserved/excluded files (see below).
+
+Two file sets are never copied or removed by sync()'s generic loop:
+  - preserved_plugin_files: plugin-only files with no source equivalent
+    (e.g. .claude-plugin/plugin.json, hooks/hooks.json) - edited by hand
+    directly in the plugin.
+  - source_excluded_files: source files that exist upstream but must not be
+    copied as-is, either because they're workspace-only
+    (hooks/block-root-file-creation.json) or because a dedicated step handles
+    them instead (agents/ENSDF-Agent.agent.md, via sync_agent_file()).
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -7,34 +38,46 @@ import shutil
 from pathlib import Path
 
 
-MANAGED_ENTRIES = (
+# Top-level entries under the source .github/ dir (and, mirrored, under the
+# plugin root) that sync() plain-copies 1:1. Anything not listed here is
+# ignored by the sync loop (e.g. docs/, temp/ at the source root).
+managed_entries = (
     "agents",
-    "copilot-instructions.md",
     "hooks",
     "prompts",
     "scripts",
     "skills",
 )
 
-EXCLUDED_SEGMENTS = {
+# Any path containing one of these directory names, anywhere in its parts, is
+# skipped entirely: never copied into the plugin, and any stale copy already
+# in the plugin is removed.
+excluded_segments = {
     "docs",
     "temp",
     "__pycache__",
 }
 
-PRESERVED_PLUGIN_FILES = {
+# Plugin-only files with no source-repo equivalent. sync() never copies over
+# or deletes these; they're maintained by hand in the plugin payload.
+preserved_plugin_files = {
     Path(".claude-plugin/plugin.json"),
     Path("hooks/hooks.json"),
+}
+
+# Source files that live under managed_entries but are skipped by the generic
+# copy loop in sync(): block-root-file-creation.json is workspace-only, and
+# agents/ENSDF-Agent.agent.md is handled instead by sync_agent_file() (see
+# module docstring above).
+source_excluded_files = {
+    Path("hooks/block-root-file-creation.json"),
     Path("agents/ENSDF-Agent.agent.md"),
 }
 
-# Files in the source .github tree that are workspace-only and must not be copied to the plugin
-SOURCE_EXCLUDED_FILES = {
-    Path("hooks/block-root-file-creation.json"),
-}
-
-# JSON files that carry the plugin version — updated by bump_versions()
-VERSION_FILES = [
+# JSON files that carry the plugin version, updated by bump_versions(). The
+# first entry is canonical: its "version" value is read as the old version
+# before bumping, then the new version is written to every file in this list.
+version_files = [
     Path("plugins/ensdf-agent/.claude-plugin/plugin.json"),  # canonical source
     Path(".claude-plugin/marketplace.json"),
     Path(".github/plugin/marketplace.json"),
@@ -43,7 +86,7 @@ VERSION_FILES = [
 
 def bump_versions(repo_root: Path, bump: str, dry_run: bool) -> None:
     """Bump the plugin version using single-digit patch rollover."""
-    canonical = repo_root / VERSION_FILES[0]
+    canonical = repo_root / version_files[0]
     text = canonical.read_text(encoding="utf-8")
     match = re.search(r'"version"\s*:\s*"(\d+\.\d+\.\d+)"', text)
     if not match:
@@ -67,7 +110,7 @@ def bump_versions(repo_root: Path, bump: str, dry_run: bool) -> None:
     new = f"{major}.{minor}.{patch}"
 
     print(f"Version bump ({bump}): {old} → {new}")
-    for rel in VERSION_FILES:
+    for rel in version_files:
         label = rel.as_posix()
         if dry_run:
             print(f"  WOULD UPDATE {label}")
@@ -84,7 +127,7 @@ def normalize_relative_path(path: Path | str) -> Path:
 
 
 def is_excluded(relative_path: Path) -> bool:
-    return any(part in EXCLUDED_SEGMENTS for part in relative_path.parts)
+    return any(part in excluded_segments for part in relative_path.parts)
 
 
 def sha256sum(path: Path) -> str:
@@ -97,7 +140,7 @@ def sha256sum(path: Path) -> str:
 
 def iter_managed_source_files(source_root: Path) -> list[Path]:
     files: list[Path] = []
-    for entry in MANAGED_ENTRIES:
+    for entry in managed_entries:
         full_path = source_root / entry
         if not full_path.exists():
             continue
@@ -120,7 +163,7 @@ def iter_managed_source_files(source_root: Path) -> list[Path]:
 
 def iter_managed_target_files(plugin_root: Path) -> list[Path]:
     files: list[Path] = []
-    for entry in MANAGED_ENTRIES:
+    for entry in managed_entries:
         full_path = plugin_root / entry
         if not full_path.exists():
             continue
@@ -130,12 +173,12 @@ def iter_managed_target_files(plugin_root: Path) -> list[Path]:
                 if not child.is_file():
                     continue
                 relative = child.relative_to(plugin_root)
-                if not is_excluded(relative) and relative not in PRESERVED_PLUGIN_FILES:
+                if not is_excluded(relative) and relative not in preserved_plugin_files:
                     files.append(relative)
             continue
 
         relative_file = normalize_relative_path(entry)
-        if not is_excluded(relative_file) and relative_file not in PRESERVED_PLUGIN_FILES:
+        if not is_excluded(relative_file) and relative_file not in preserved_plugin_files:
             files.append(relative_file)
 
     return sorted(set(files))
@@ -152,7 +195,7 @@ def collect_excluded_directories(root: Path) -> list[Path]:
     directories = [
         path
         for path in root.rglob("*")
-        if path.is_dir() and path.name in EXCLUDED_SEGMENTS
+        if path.is_dir() and path.name in excluded_segments
     ]
     return sorted(set(directories), reverse=True)
 
@@ -174,7 +217,150 @@ def sync_readme(repo_root: Path, plugin_root: Path, dry_run: bool) -> None:
         print("COPIED README.md")
 
 
+def strip_agent_hooks_block(agent_text: str) -> str:
+    """Remove the agent-scoped ``hooks:`` frontmatter block from an agent file.
+
+    VS Code Agent Plugins do not support agent-scoped hooks — plugin hooks fire
+    for any active agent via hooks/hooks.json instead. The workspace-only
+    source agent file carries a ``hooks:`` key in its YAML frontmatter; this
+    strips that key (and its nested mapping) while leaving every other
+    frontmatter key and the document body untouched.
+
+    Implementation note: this does a line-based scan, not real YAML parsing.
+    It finds the line ``hooks:`` at column 0 inside the frontmatter, then skips
+    every following line that is blank or indented (i.e. part of the nested
+    mapping), stopping at the first unindented line (a new top-level key) or
+    the closing ``---`` fence — whichever comes first.
+    """
+    lines = agent_text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return agent_text  # no frontmatter fence at all — nothing to strip
+
+    # Locate the closing '---' fence that ends the frontmatter block.
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+    if end_idx is None:
+        return agent_text  # malformed/no closing fence — leave text as-is
+
+    frontmatter = lines[1:end_idx]
+    remainder = lines[end_idx:]  # closing '---' line onward (unchanged)
+
+    filtered: list[str] = []
+    skipping = False
+    for line in frontmatter:
+        if not skipping:
+            if line.rstrip("\n") == "hooks:":
+                skipping = True  # start of the block to drop
+                continue
+            filtered.append(line)
+        else:
+            # Still inside the hooks: mapping while lines are blank or indented.
+            if line.strip() == "" or line[:1] in (" ", "\t"):
+                continue
+            skipping = False  # hit a new unindented key — block is over
+            filtered.append(line)
+
+    return "".join(["---\n", *filtered, *remainder])
+
+
+def build_merged_agent_content(agent_text: str, instructions_text: str) -> str:
+    """Build the full plugin agent-file content from current source content.
+
+    This is a full rebuild, not an incremental merge: every call recomputes
+    the entire output from the two inputs currently on disk, so any edit,
+    addition, or removal in either source file is reflected on the very next
+    sync run. Nothing from a previous plugin copy is reused or preserved.
+
+    Two things happen to agent_text before it's used:
+      1. Its agent-scoped ``hooks:`` frontmatter block is stripped via
+         strip_agent_hooks_block() — VS Code Agent Plugins don't support
+         agent-scoped hooks, so that block would be dead weight in the
+         plugin; equivalent hooks live in hooks/hooks.json instead.
+      2. instructions_text (copilot-instructions.md) is appended as a
+         clearly labeled section, since VS Code Agent Plugins do not support
+         shipping that file standalone alongside an agent.
+    If instructions_text is empty (e.g. the source file was deleted), the
+    appended section is simply omitted.
+    """
+    stripped_agent = strip_agent_hooks_block(agent_text).rstrip("\n")
+    instructions_body = instructions_text.strip("\n")
+
+    sections = [stripped_agent]
+    if instructions_body:
+        sections.append(
+            "\n---\n\n"
+            "## Workspace Copilot Instructions\n\n"
+            "*(Merged from `copilot-instructions.md` — VS Code Agent Plugins do "
+            "not support shipping a separate workspace-level "
+            "`copilot-instructions.md` alongside an agent.)*\n\n"
+            + instructions_body
+        )
+    return "\n".join(sections) + "\n"
+
+
+def sync_agent_file(source_root: Path, plugin_root: Path, dry_run: bool) -> None:
+    """Regenerate the plugin's agent file from the current source files.
+
+    Reads source agents/ENSDF-Agent.agent.md + copilot-instructions.md fresh
+    every run and rebuilds the merged output via build_merged_agent_content(),
+    which also strips the source agent's agent-scoped `hooks:` frontmatter
+    block (see strip_agent_hooks_block()) and appends the instructions file as
+    a labeled section. The result is compared verbatim (full-text equality)
+    against the existing plugin file to decide COPIED/SKIP; there is no
+    partial/section-level patch.
+
+    Also deletes any stale standalone copilot-instructions.md left in the
+    plugin payload, since that file must never ship on its own.
+    """
+    source_agent = source_root / "agents" / "ENSDF-Agent.agent.md"
+    source_instructions = source_root / "copilot-instructions.md"
+    target_agent = plugin_root / "agents" / "ENSDF-Agent.agent.md"
+    target_instructions = plugin_root / "copilot-instructions.md"
+
+    if not source_agent.is_file():
+        print("SKIP   agents/ENSDF-Agent.agent.md (source not found)")
+        return
+
+    agent_text = source_agent.read_text(encoding="utf-8")
+    instructions_text = (
+        source_instructions.read_text(encoding="utf-8")
+        if source_instructions.is_file()
+        else ""
+    )
+    merged = build_merged_agent_content(agent_text, instructions_text)
+
+    existing = target_agent.read_text(encoding="utf-8") if target_agent.is_file() else None
+    if existing == merged:
+        print("SKIP   agents/ENSDF-Agent.agent.md (merged, unchanged)")
+    elif dry_run:
+        print("COPY   agents/ENSDF-Agent.agent.md (merged with copilot-instructions.md)")
+    else:
+        target_agent.parent.mkdir(parents=True, exist_ok=True)
+        target_agent.write_text(merged, encoding="utf-8")
+        print("COPIED agents/ENSDF-Agent.agent.md (merged with copilot-instructions.md)")
+
+    # copilot-instructions.md must not ship standalone — VS Code Agent Plugins
+    # ignore it; remove any stale copy left in the plugin payload.
+    if target_instructions.is_file():
+        if dry_run:
+            print("REMOVE copilot-instructions.md (merged into agents/ENSDF-Agent.agent.md)")
+        else:
+            target_instructions.unlink()
+            print("REMOVED copilot-instructions.md (merged into agents/ENSDF-Agent.agent.md)")
+
+
 def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
+    """Mirror-copy managed_entries (except agents/ENSDF-Agent.agent.md, handled
+    separately by sync_agent_file) from source_root into plugin_root:
+      - copy any source file that's new or changed (sha256 mismatch)
+      - skip source files that are identical, preserved, or excluded
+      - remove any plugin file under managed_entries that no longer exists
+        in source (unless it's a preserved_plugin_files entry)
+      - remove any leftover excluded_segments directories in the plugin
+    """
     if not source_root.is_dir():
         raise FileNotFoundError(f"Source .github path not found: {source_root}")
     if not plugin_root.is_dir():
@@ -188,8 +374,9 @@ def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
     removed = 0
     skipped = 0
 
+    # Pass 1: copy every source file that's missing or changed in the plugin.
     for relative in source_files:
-        if relative in PRESERVED_PLUGIN_FILES or relative in SOURCE_EXCLUDED_FILES:
+        if relative in preserved_plugin_files or relative in source_excluded_files:
             print(f"SKIP   {relative.as_posix()} (preserved/excluded)")
             skipped += 1
             continue
@@ -213,6 +400,7 @@ def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
             print(f"COPIED {relative.as_posix()}")
         copied += 1
 
+    # Pass 2: remove any plugin file whose source no longer exists.
     for relative in target_files:
         if relative in source_set:
             continue
@@ -299,6 +487,7 @@ def main() -> int:
     if not args.no_bump:
         bump_versions(repo_root, args.bump, args.dry_run)
     sync_readme(repo_root, plugin_root, args.dry_run)
+    sync_agent_file(source_root, plugin_root, args.dry_run)
     return sync(source_root, plugin_root, args.dry_run)
 
 
