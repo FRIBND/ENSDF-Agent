@@ -30,19 +30,21 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Hooks
 
-Three hooks enforce safety and data integrity. All fire automatically — no configuration required after installation.
+Three hooks enforce safety and data integrity, all declared together in the plugin's `hooks/hooks.json`. They fire automatically for any active agent while the plugin is enabled — no per-agent configuration needed after installation.
 
-| Hook | Level | Event | Blocks | Allows |
-|------|-------|-------|--------|--------|
-| `block-root-file-creation` | workspace | PreToolUse | File creation at the workspace root; under mass-chain dirs (`A<N>/`); under `XUNDL/` | File creation under `.github/temp/`; any other tool call |
-| `block-git-revert` | agent | PreToolUse | `git restore`/`git checkout` on `.ens` files; on non-temp paths; bare/ambiguous `git checkout` | `git restore`/`git checkout` scoped to temp files only; `git switch`; unrelated commands |
-| `validate_ens` | agent | PostToolUse | `.ens` edits containing non-ASCII characters; data-record edits that fail the 80-column ruler | Comment-only edits (ruler skipped); edits to non-`.ens` files |
+In the source workspace, `block-git-revert` and `validate_ens` are defined as agent-scoped hooks in `ENSDF-Agent.agent.md`'s frontmatter (a [VS Code preview feature](https://code.visualstudio.com/docs/agent-customization/hooks#_agent-scoped-hooks) gated by `chat.useCustomAgentHooks`), so there they only run while ENSDF-Agent is the active custom agent. VS Code Agent Plugins don't support shipping agent-scoped hooks, so the plugin's sync tooling re-declares all three in `hooks/hooks.json` instead — broadening `block-git-revert` and `validate_ens` from "only when ENSDF-Agent is active" to "any active agent while the plugin is enabled." `block-root-file-creation` keeps the same any-agent scope in both places; only its packaging changes (standalone workspace hook file → plugin `hooks.json` entry).
+
+| Hook | Event | Blocks | Allows |
+|------|-------|--------|--------|
+| `block-root-file-creation` | PreToolUse | File creation at the workspace root; under mass-chain dirs (`A<N>/`); under `XUNDL/` | File creation under `.github/temp/`; any other tool call |
+| `block-git-revert` | PreToolUse | `git restore`/`git checkout` on `.ens` files; on non-temp paths; bare/ambiguous `git checkout` | `git restore`/`git checkout` scoped to temp files only; `git switch`; unrelated commands |
+| `validate_ens` | PostToolUse | `.ens` edits containing non-ASCII characters; data-record edits that fail the 80-column ruler | Comment-only edits (ruler skipped); edits to non-`.ens` files |
 
 ## Caveats
 
 - VS Code does not support installing Agent Plugins in a specific workspace.
 - VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `agents/ENSDF-Agent.agent.md` instead.
-- VS Code Agent Plugins do not support agent-scoped hooks; plugin hooks fire for any active agent while the plugin is enabled.
+- VS Code Agent Plugins do not support shipping agent-scoped hooks (the `hooks:` frontmatter field on a custom agent); the plugin's sync tooling re-declares the equivalent hooks in `hooks/hooks.json`, which fire for any active agent while the plugin is enabled — see Hooks above.
 - Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
 
 
