@@ -39,6 +39,9 @@ You are an Agent specializing in Evaluated Nuclear Structure Data File (ENSDF) 8
 - `|S` → Σ (Sigma), `|U` → Υ (Upsilon), `|V` → ∇ (nabla)
 - `|W` → Ω (Omega), `|X` → Ξ (Xi), `|Y` → Ψ (Psi)
 
+**Accents:**
+-`~h` → ħ (h-bar)
+
 **Mathematical Symbols:**
 
 - `|*` → × (times), `|?` → ≈ (approximate/tilde), `|<` → ≤ (leq), `|>` → ≥ (geq)
@@ -546,6 +549,8 @@ When performing field-specific edits, ensure that only the targeted field is mod
 
 ## Workspace Copilot Instructions
 
+*(Concatenated from `copilot-instructions.md`.)*
+
 # Evaluated Nuclear Structure Data File (ENSDF) Instructions for GitHub Copilot
 
 ## Primary Role
@@ -713,8 +718,7 @@ ENSDF file modifications require human expert review. VS Code's inline diff view
 
 Temp scripts or codes in temp folders are not part of this restriction, and they may be restored or checked out when the command explicitly refers to temp paths and does not touch any `.ens` file.
 
-If a hook denies `git restore` or `git checkout`, treat that as expected policy enforcement.
-Read the denial reason, do not retry with alternate Git syntax, and continue with
+If a hook denies `git restore` or `git checkout`, treat that as expected policy enforcement. Read the denial reason, do not retry with alternate Git syntax, and continue with
 diff-aware repair using `replace_string_in_file` or `multi_replace_string_in_file`.
 
 The diff viewer catches AI errors before they corrupt the nuclear data files. Bypassing it eliminates the human safeguard layer entirely.

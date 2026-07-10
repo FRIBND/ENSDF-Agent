@@ -293,9 +293,7 @@ def build_merged_agent_content(agent_text: str, instructions_text: str) -> str:
         sections.append(
             "\n---\n\n"
             "## Workspace Copilot Instructions\n\n"
-            "*(Merged from `copilot-instructions.md` — VS Code Agent Plugins do "
-            "not support shipping a separate workspace-level "
-            "`copilot-instructions.md` alongside an agent.)*\n\n"
+            "*(Concatenated from `copilot-instructions.md`.)*\n\n"
             + instructions_body
         )
     return "\n".join(sections) + "\n"
