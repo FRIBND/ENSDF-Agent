@@ -41,7 +41,7 @@ In the source workspace, `block-git-revert` and `validate_ens` are defined as ag
 | `validate_ens` | PostToolUse | `.ens` edits containing non-ASCII characters; data-record edits that fail the 80-column ruler | Comment-only edits (ruler skipped); edits to non-`.ens` files |
 
 ## Caveats
-
+- VS Code may not allow you to enable `ENSDF-Agent` from the Agents menu. If you encounter this issue, restart VS Code and select `ENSDF-Agent` again.
 - VS Code does not support installing Agent Plugins in a specific workspace.
 - VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `agents/ENSDF-Agent.agent.md` instead.
 - VS Code Agent Plugins do not support shipping agent-scoped hooks (the `hooks:` frontmatter field on a custom agent); the plugin's sync tooling re-declares the equivalent hooks in `hooks/hooks.json`, which fire for any active agent while the plugin is enabled — see Hooks above.
