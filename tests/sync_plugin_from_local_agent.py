@@ -63,6 +63,7 @@ excluded_segments = {
 preserved_plugin_files = {
     Path(".claude-plugin/plugin.json"),
     Path("hooks/hooks.json"),
+    Path("icon.png"),
 }
 
 # Source files that live under managed_entries but are skipped by the generic

@@ -1,6 +1,7 @@
 ﻿{
   "name": "ensdf-agent",
-  "version": "0.2.9",
+  "version": "0.3.0",
+  "icon": "icon.png",
   "description": "ENSDF-Agent for nuclear data evaluation",
   "author": {
     "name": "FRIB Nuclear Data Group"
