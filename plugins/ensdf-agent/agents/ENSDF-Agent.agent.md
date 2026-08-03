@@ -281,13 +281,15 @@ Note: Multiple identical gamma energies appearing in multiple level blocks shoul
 
 ### Cross-Reference Record (XREF-Record) 
 
-Only in the Adopted Datasets: XREF (cross-reference) labels use capital letters immediately follow an L-record indicate which datasets observe this level. XREF labels can be followed by notations such as (energy), (*), (?), or combinations thereof.
+Only in the Adopted Datasets: XREF (cross-reference) labels in continuation records immediately follow an L-record indicate which datasets observe this level. XREF labels use capital letters and can be followed by notations such as (energy), (*), (?), or combinations thereof.
 
 - `Plain capital letter` label: dataset contains a level that matches the Adopted level. Example: `XREF=EK` means datasets E and K contain a level that matches the Adopted level.
 
 - `Label(energy)`: dataset reports an energy outside the Adopted uncertainty range but is still considered to match the same physical level. Example: L 4858.5 with `XREF=BEGH(4865)K`, in which `H(4865)` means dataset H contains a level at 4865 keV that is judged to be the same level as the Adopted level 4858.5. The energy in parentheses is the dataset H level energy, not the Adopted level energy. The energy value must match the dataset level energy exactly, including decimal places. Usually, the energy values in parentheses are integers.
 
-- `Letter(*)`: ambiguous matching; one dataset level may correspond to two or more Adopted levels. Example: `XREF=CDFG(*)LN`, in which `G(*)` means the level from dataset G has ambiguous doublet or multiplet matching. **Critical parsing rule:** `(*)` attaches ONLY to the immediately preceding (last) letter — in `CDFG(*)LN`, only G gets the `(*)` modifier; C, D, F are plain matches. Because `(*)` denotes ambiguity among multiple Adopted levels, an XREF tag with `(*)` must appear on at least two levels in the Adopted dataset. `Letter(energy*)` denotes ambiguous matching while providing energy information.
+- `Letter(*)`: ambiguous matching; one dataset level may correspond to two or more Adopted levels. Example: `XREF=CDFK(*)LN`, in which `G(*)` means the level from dataset G has ambiguous doublet or multiplet matching. **Critical parsing rule:** `(*)` attaches ONLY to the immediately preceding (last) letter — in `CDFK(*)LN`, only K gets the `(*)` modifier notation; C, D, F are plain matches. Because `(*)` denotes ambiguity among multiple Adopted levels, an XREF label with `(*)` must appear on at least two levels in the Adopted dataset.
+
+- `Letter(energy*)` denotes ambiguous matching while providing energy information. For example, `XREF=CDFK(4256*)LN` means the level from dataset K has a level at 4256 keV that is ambiguously matched to several Adopted levels. `K(4256*)` must appear exactly in every ambiguously matched level' XREF label, and the `(*)` modifier notation cannot be omitted in any of the ambiguously matched level's XREF labels.
 
 - `Letter(?)`: questionable or uncertain match. Example: `XREF=ADIJ(?)OP` means dataset J reports a questionable level that possibly matches the Adopted level. `Letter(energy?)` is allowed for questionable matching with energy information.
 
@@ -395,14 +397,13 @@ Format: Plain integers only (NO `{I}` notation, NO parentheses).
 
 For intensities and other values in scientific notation:
 - **Standard format:** `(5.6±1.0)×10^-4` becomes `5.6E-4 10` in ENSDF.
-- **Value field:** Use `E-n` notation (e.g., `5.6E-4`).
+- **Value field:** Use `E-n` notation (e.g., `5.6E-4`) and ``En` for positive exponents (e.g., `1.1E6`).
 - **Uncertainty field:** Use digits representing the last significant digit (e.g., `10` for ±1.0 if the value has one decimal place).
 - **Examples:**
     - `(1.1±0.3)×10^-6` → Value: `1.1E-6`, Uncertainty: `3`.
     - `(76±20)×10^-6` → Value: `76E-6`, Uncertainty: `20`.
     - `(3.3±1.2)×10^-4` → Value: `3.3E-4`, Uncertainty: `12`.
-- **NEVER use:** `×10^-n` notation directly in ENSDF records.
-- **ALWAYS use:** `E-n` notation for the value with a separate uncertainty field.
+- **NEVER use:** `×10^-n` notation directly in ENSDF data records.
 
 #### GT and LT Markers in Uncertainty Fields
 
