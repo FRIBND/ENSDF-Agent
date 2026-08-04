@@ -58,7 +58,7 @@ Select Disable (Workspace) from the dropdown menu.
 
 ENSDF-Agent is designed to assist in nuclear data evaluation, not a substitute for human evaluators. It does not possess true understanding or expertise in nuclear physics.
 
-AI-generated content must be independently verified by human evaluators for scientific and technical accuracy.
+AI-generated content in data sets require review and judgment by human evaluators for scientific and technical accuracy.
 
 The human evaluator remains the sole authority and is responsible for the validity of any datasets submitted to NNDC, IAEA, or other organizations.
 
