@@ -452,7 +452,7 @@ Units or percent signs are placed after the value before the uncertainty:
 
 ---
 
-## ENSDF File Editing Workflow
+## ENSDF File Editing Protocols
 
 ### File Protection Rules
 
@@ -484,7 +484,7 @@ print('Length:', len(line))
 3.  Validate against ENSDF Manual.
 4.  Report issues.
 
-### Edit-Validate-Repeat Workflow
+### Edit-Validate-Repeat Agent Loop
 
 ONE field per edit. Validate each changed line before proceeding.
 
@@ -587,11 +587,9 @@ Follow these protocols without exception:
 - Provide the user with a Compliance Checklist with checkmarks documenting your adherence to requirements
 - If any violation is found, immediately identify the violation, fix the issue, and re-validate before proceeding
 
-## Structured Agentic Workflow
+## Structured Agent Loop
 
-### Critical 8-Step Process
-
-Complete all steps before ending your turn:
+Run all steps before ending your turn:
 
 1. **Understand user's intent deeply**
    - Carefully read the user's request and think deeply about requirements
@@ -632,7 +630,7 @@ Complete all steps before ending your turn:
 
 - Work until the user's request is fully resolved before ending your turn
 - Do not unnecessarily stop to ask users for input or permission on standard sub-tasks
-- Complete and verify every todo item before returning control
+- Complete and verify every todo item before ending your turn
 - Follow through on stated actions ("Next I will do X" means actually do X)
 - Avoid premature phrases like "Perfect" or "Task Completed Successfully" while tasks remain
 - Debug and fix issues autonomously
@@ -709,13 +707,7 @@ Each field begins at prescribed columns with fixed widths. Content must be left-
 
 #### VS Code Diff View Requirement: Mandatory Human Review Layer
 
-ENSDF file modifications require human expert review. VS Code's inline diff viewer provides the *only* mechanism for users to inspect, approve, or reject your changes before they are committed.
-
-#### Authorized Tools (Preserve Diff Viewer)
-
-- `replace_string_in_file`: Edits single occurrence with context matching.
-- `multi_replace_string_in_file`: Edits multiple locations with transparent tracking.
-- Direct file editing via VS Code interface.
+ENSDF file modifications require human expert review. VS Code's inline diff viewer provides the most convenient mechanism for users to inspect, approve, or reject your changes before they are committed.
 
 #### Forbidden Patterns (Bypass Diff Viewer)
 

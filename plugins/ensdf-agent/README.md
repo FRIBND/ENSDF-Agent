@@ -26,7 +26,8 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 1. Configure plugin marketplaces by clicking "Add Item" and entering `FRIBND/ENSDF-Agent` in the `setting(chat.plugins.marketplaces)` setting.
 2. Open the Extensions view (`kb(workbench.view.extensions)`) and enter `@agentPlugins ENSDF-Agent` in the search field.
    - Alternatively, select the **More Actions** (three dots) icon in the Extensions sidebar and choose **Views** > **Agent Plugins**.
-3. Click **Install** to install the ENSDF-Agent Plugin in your user profile.
+3. Click **Install** to install the ENSDF-Agent Plugin to your user profile.
+4. Troubleshooting: https://code.visualstudio.com/docs/agent-customization/agent-plugins#_troubleshooting
 
 ## Hooks
 
