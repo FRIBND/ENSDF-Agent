@@ -1,6 +1,6 @@
 ﻿{
   "name": "ensdf-agent",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "icon": "icon.png",
   "description": "ENSDF-Agent for nuclear data evaluation",
   "author": {
