@@ -1,7 +1,7 @@
-﻿{
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "ensdf-agent",
   "version": "0.3.4",
-  "icon": "icon.png",
   "description": "ENSDF-Agent for nuclear data evaluation",
   "author": {
     "name": "FRIB Nuclear Data Group"
@@ -9,14 +9,13 @@
   "homepage": "https://github.com/FRIBND/ENSDF-Agent",
   "repository": "https://github.com/FRIBND/ENSDF-Agent",
   "license": "MIT",
+  "icon": "icon.png",
   "keywords": [
-        "ensdf",
-        "frib",
-        "physics",
-        "nuclear-physics",
-        "nuclear-data",
-        "nuclear-data-evaluation"
-  ],
-  "agents": "./agents",
-  "skills": "./skills"
+    "ensdf",
+    "frib",
+    "physics",
+    "nuclear-physics",
+    "nuclear-data",
+    "nuclear-data-evaluation"
+  ]
 }

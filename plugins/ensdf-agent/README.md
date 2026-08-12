@@ -33,7 +33,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 Three hooks enforce safety and data integrity, all declared together in the plugin's `hooks/hooks.json`. They fire automatically for any active agent while the plugin is enabled — no per-agent configuration needed after installation.
 
-In the source workspace, `block-git-revert` and `validate_ens` are defined as agent-scoped hooks in `ENSDF-Agent.agent.md`'s frontmatter (a [VS Code preview feature](https://code.visualstudio.com/docs/agent-customization/hooks#_agent-scoped-hooks) gated by `chat.useCustomAgentHooks`), so there they only run while ENSDF-Agent is the active custom agent. VS Code Agent Plugins don't support shipping agent-scoped hooks, so the plugin's sync tooling re-declares all three in `hooks/hooks.json` instead — broadening `block-git-revert` and `validate_ens` from "only when ENSDF-Agent is active" to "any active agent while the plugin is enabled." `block-root-file-creation` keeps the same any-agent scope in both places; only its packaging changes (standalone workspace hook file → plugin `hooks.json` entry).
+In the original workspace, `block-git-revert` and `validate_ens` are defined as agent-scoped hooks in `ENSDF-Agent.agent.md`'s frontmatter (a [VS Code preview feature](https://code.visualstudio.com/docs/agent-customization/hooks#_agent-scoped-hooks) gated by `chat.useCustomAgentHooks`), so there they only run while ENSDF-Agent is the active custom agent. VS Code Agent Plugins don't support shipping agent-scoped hooks, so we re-declare all three in `hooks/hooks.json` instead — broadening `block-git-revert` and `validate_ens` from "only when ENSDF-Agent is active" to "any active agent while the plugin is enabled." `block-root-file-creation` keeps the same any-agent scope in both places; only its packaging changes (standalone workspace hook file → plugin `hooks.json` entry).
 
 | Hook | Event | Blocks | Allows |
 |------|-------|--------|--------|
@@ -48,12 +48,7 @@ In the source workspace, `block-git-revert` and `validate_ens` are defined as ag
 - VS Code Agent Plugins do not support shipping agent-scoped hooks (the `hooks:` frontmatter field on a custom agent); the plugin's sync tooling re-declares the equivalent hooks in `hooks/hooks.json`, which fire for any active agent while the plugin is enabled — see Hooks above.
 - Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
 
-
-- VS Code extension-contributed agents and skills will negatively impact the user experience of the ENSDF-Agent. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the chat menu.
-
-Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable:
-Click the Gear icon (Manage) directly on the extension list item.
-Select Disable (Workspace) from the dropdown menu.
+- VS Code extension-contributed agents and skills will negatively impact the user experience of the ENSDF-Agent. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the chat menu. Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable: Click the Gear icon (Manage) directly on the extension list item. Select Disable (Workspace) from the dropdown menu.
 
 ## Disclaimer and Usage Notice
 

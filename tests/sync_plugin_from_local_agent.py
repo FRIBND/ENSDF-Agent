@@ -61,7 +61,7 @@ excluded_segments = {
 # Plugin-only files with no source-repo equivalent. sync() never copies over
 # or deletes these; they're maintained by hand in the plugin payload.
 preserved_plugin_files = {
-    Path(".claude-plugin/plugin.json"),
+    Path("plugin.json"),
     Path("hooks/hooks.json"),
     Path("icon.png"),
 }
@@ -79,7 +79,7 @@ source_excluded_files = {
 # first entry is canonical: its "version" value is read as the old version
 # before bumping, then the new version is written to every file in this list.
 version_files = [
-    Path("plugins/ensdf-agent/.claude-plugin/plugin.json"),  # canonical source
+    Path("plugins/ensdf-agent/plugin.json"),  # canonical source
     Path(".claude-plugin/marketplace.json"),
     Path(".github/plugin/marketplace.json"),
 ]
