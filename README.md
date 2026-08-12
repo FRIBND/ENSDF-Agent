@@ -11,6 +11,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Development Timeline
 
+- 2026-08-11: Migrated ENSDF-Agent Plugin to [Agent Plugins 1.0](https://agent-plugins.org/) open standard format.
 - 2026-05-07: ENSDF-Agent Harness was refined for improved token efficiency and robust, operational use in real-world ENSDF evaluation workflows. Harness consumes <30,000 input tokens in one round.
 - 2026-03-25: ENSDF-Agent Version 0.0.1, with 3 Agent Hooks and 24 Agent Skills, was released as an Agent Plugin via the Microsoft VS Code Plugin Marketplace.
 - 2026-03-04: ENSDF-Agent became available as an open-source repository at [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/ENSDF-Agent).
@@ -21,7 +22,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 - 2025-08-06: The initial version of the FRIBND Custom Agent Chat Mode was posted within [github.com/sunlijie-msu/ENSDF](https://github.com/sunlijie-msu/ENSDF).
 
 
-## Requirements
+## Prerequisites
 
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
 - Windows users: Python must be invokable as `python` from terminal (the hooks also ship `.ps1` fallbacks for `block-root-file-creation` and `block-git-revert`; `validate_ens` requires Python on all platforms).
