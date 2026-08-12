@@ -31,21 +31,19 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Hooks
 
-Three hooks enforce safety and data integrity, all declared together in the plugin's `hooks/hooks.json`. They fire automatically for any active agent while the plugin is enabled — no per-agent configuration needed after installation.
-
-In the original workspace, `block-git-revert` and `validate_ens` are defined as agent-scoped hooks in `ENSDF-Agent.agent.md`'s frontmatter (a [VS Code preview feature](https://code.visualstudio.com/docs/agent-customization/hooks#_agent-scoped-hooks) gated by `chat.useCustomAgentHooks`), so there they only run while ENSDF-Agent is the active custom agent. VS Code Agent Plugins don't support shipping agent-scoped hooks, so we re-declare all three in `hooks/hooks.json` instead — broadening `block-git-revert` and `validate_ens` from "only when ENSDF-Agent is active" to "any active agent while the plugin is enabled." `block-root-file-creation` keeps the same any-agent scope in both places; only its packaging changes (standalone workspace hook file → plugin `hooks.json` entry).
+Three hooks in `hooks.json` use the same base format as [workspace hooks](https://code.visualstudio.com/docs/agent-customization/hooks#_hook-configuration-format). All fire automatically for any active agent while the plugin is enabled.
 
 | Hook | Event | Blocks | Allows |
 |------|-------|--------|--------|
-| `block-root-file-creation` | PreToolUse | File creation at the workspace root; under mass-chain dirs (`A<N>/`); under `XUNDL/` | File creation under `.github/temp/`; any other tool call |
-| `block-git-revert` | PreToolUse | `git restore`/`git checkout` on `.ens` files; on non-temp paths; bare/ambiguous `git checkout` | `git restore`/`git checkout` scoped to temp files only; `git switch`; unrelated commands |
-| `validate_ens` | PostToolUse | `.ens` edits containing non-ASCII characters; data-record edits that fail the 80-column ruler | Comment-only edits (ruler skipped); edits to non-`.ens` files |
+| `block-root-file-creation` | PreToolUse | `create_file` at workspace root, `A<N>/`, or `XUNDL/` | `.github/temp/`; non-`create_file` tools |
+| `block-git-revert` | PreToolUse | `git restore`/`git checkout` on `.ens` or non-temp paths; bare `checkout` | temp-scoped restore/checkout; `git switch`; unrelated commands |
+| `validate_ens` | PostToolUse | Non-ASCII `.ens` content; data-record ruler failures | Comment-only edits; non-`.ens` files |
+
 
 ## Caveats
 - VS Code may not allow you to enable `ENSDF-Agent` from the Agents menu. If you encounter this issue, restart VS Code and select `ENSDF-Agent` again.
 - VS Code does not support installing Agent Plugins in a specific workspace.
 - VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `agents/ENSDF-Agent.agent.md` instead.
-- VS Code Agent Plugins do not support shipping agent-scoped hooks (the `hooks:` frontmatter field on a custom agent); the plugin's sync tooling re-declares the equivalent hooks in `hooks/hooks.json`, which fire for any active agent while the plugin is enabled — see Hooks above.
 - Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
 
 - VS Code extension-contributed agents and skills will negatively impact the user experience of the ENSDF-Agent. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the chat menu. Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable: Click the Gear icon (Manage) directly on the extension list item. Select Disable (Workspace) from the dropdown menu.

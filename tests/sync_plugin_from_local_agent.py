@@ -62,7 +62,7 @@ excluded_segments = {
 # or deletes these; they're maintained by hand in the plugin payload.
 preserved_plugin_files = {
     Path("plugin.json"),
-    Path("hooks/hooks.json"),
+    Path("hooks.json"),
     Path("icon.png"),
 }
 
