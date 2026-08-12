@@ -21,6 +21,11 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 - 2025-08-06: The initial version of the FRIBND Custom Agent Chat Mode was posted within [github.com/sunlijie-msu/ENSDF](https://github.com/sunlijie-msu/ENSDF).
 
 
+## Requirements
+
+- **Python 3** on PATH — hooks and ENSDF validation scripts require it.
+- Windows users: Python must be invokable as `python` from terminal (the hooks also ship `.ps1` fallbacks for `block-root-file-creation` and `block-git-revert`; `validate_ens` requires Python on all platforms).
+
 ## Installation
 
 1. Configure plugin marketplaces by clicking "Add Item" and entering `FRIBND/ENSDF-Agent` in the `setting(chat.plugins.marketplaces)` setting.

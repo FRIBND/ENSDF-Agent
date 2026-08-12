@@ -18,6 +18,7 @@
       {
         "type": "command",
         "command": "python \"${PLUGIN_ROOT}/hooks/scripts/validate_ens.py\"",
+        "windows": "python \"${PLUGIN_ROOT}/hooks/scripts/validate_ens.py\"",
         "timeout": 30
       }
     ]
