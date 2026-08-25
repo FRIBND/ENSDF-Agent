@@ -11,7 +11,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Development Timeline
 
-- 2026-08-13: ENSDF-Agent Plugin was introduced at the 2026 Low Energy Community Meeting at ANL.
+- 2026-08-13: ENSDF-Agent Plugin was presented at the 2026 Low Energy Community Meeting at ANL.
 - 2026-08-11: Migrated ENSDF-Agent Plugin to [Agent Plugins 1.0](https://agent-plugins.org/) open standard format.
 - 2026-05-07: ENSDF-Agent Harness was refined for improved token efficiency and robust, operational use in real-world ENSDF evaluation workflows. Harness consumes <30,000 input tokens in one round.
 - 2026-03-25: ENSDF-Agent Version 0.0.1, with 3 Agent Hooks and 24 Agent Skills, was released as an Agent Plugin via the Microsoft VS Code Plugin Marketplace.
