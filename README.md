@@ -1,6 +1,11 @@
 # ENSDF-Agent
 
-Part of the AI/ML Technical Innovation at the Nuclear Data Group at the Facility for Rare Isotope Beams (nucleardata@frib.msu.edu). Supported by the U.S. Department of Energy, Office of Science, Office of Nuclear Physics under Award Number DE-SC0016948.
+Part of the AI/ML Technical Innovation at the Nuclear Data Group at the Facility for Rare Isotope Beams (nucleardata@frib.msu.edu).
+
+Supported by the U.S. Department of Energy, Office of Science, Office of Nuclear Physics under Award Number DE-SC0016948.
+
+Open-source release: [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/ENSDF-Agent)
+
 
 ## Overview
 
@@ -9,17 +14,16 @@ Developed and refined through daily evaluation tasks at FRIB Nuclear Data Group.
 
 Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copilot, ENSDF-Agent employs Harness Engineering and Semantic Structuring and integrates the power of rapidly advancing Large Language Models (LLMs) into the routine workflows of nuclear data evaluators.
 
-- **Open-source release**: [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/ENSDF-Agent)
 
 ## Development Timeline
 
-- 2026-08-13: ENSDF-Agent Plugin was presented at the 2026 Low Energy Community Meeting at ANL.
+- 2026-08-13: ENSDF-Agent Harness was introduced at the 2026 Low Energy Community Meeting at ANL.
 - 2026-08-11: Migrated ENSDF-Agent Plugin to [Agent Plugins 1.0](https://agent-plugins.org/) open standard format.
 - 2026-05-07: ENSDF-Agent Harness was refined for improved token efficiency, consuming <30K input tokens in one round.
 - 2026-03-25: ENSDF-Agent Version 0.0.1, with 3 Agent Hooks and 24 Agent Skills, was released as an Agent Plugin via the Microsoft VS Code Plugin Marketplace.
 - 2026-03-04: ENSDF-Agent became available as an open-source repository at [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/ENSDF-Agent).
 - 2026-02-23: Agent Skills were introduced as modular, portable capabilities that can be dynamically loaded into ENSDF-Agent to perform specific tasks within ENSDF workflows.
-- 2025-11-14: The FRIBND Custom Agent Chat Mode was upgraded to ENSDF AI Agent.
+- 2025-11-14: The FRIBND Custom Agent Chat Mode was upgraded to ENSDF-Agent.
 - 2025-10-30: The FRIBND AI Agent was introduced at the 2025 U.S. Nuclear Data Program Meeting.
 - 2025-08-14: The FRIBND AI Agent was first introduced at the 2025 Low Energy Community Meeting at TAMU.
 - 2025-08-06: The initial version of the FRIBND Custom Agent Chat Mode was posted within [github.com/sunlijie-msu/ENSDF](https://github.com/sunlijie-msu/ENSDF).
