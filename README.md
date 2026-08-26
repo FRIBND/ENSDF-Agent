@@ -6,14 +6,12 @@ Supported by the U.S. Department of Energy, Office of Science, Office of Nuclear
 
 Open-source release: [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/ENSDF-Agent)
 
-
 ## Overview
 
 The first AI Agent designed for Evaluated Nuclear Structure Data File (ENSDF) workflows.
 Developed and refined through daily evaluation tasks at FRIB Nuclear Data Group.
 
 Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copilot, ENSDF-Agent employs Harness Engineering and Semantic Structuring and integrates the power of rapidly advancing Large Language Models (LLMs) into the routine workflows of nuclear data evaluators.
-
 
 ## Development Timeline
 
