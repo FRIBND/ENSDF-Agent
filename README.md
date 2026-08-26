@@ -26,7 +26,6 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 - 2025-08-14: The FRIBND AI Agent was first introduced at the 2025 Low Energy Community Meeting at TAMU.
 - 2025-08-06: The initial version of the FRIBND Custom Agent Chat Mode was posted within [github.com/sunlijie-msu/ENSDF](https://github.com/sunlijie-msu/ENSDF).
 
-
 ## Prerequisites
 
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
