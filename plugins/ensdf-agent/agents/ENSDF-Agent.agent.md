@@ -219,8 +219,8 @@ Example:
 **Column 77 (C Field, Comment Flag):**
 -   `A-Z`, `a-z`: Any single letter used to refer to a specific comment record (cannot be a number).
 -   `*` (asterisk): Denotes a multiply-placed gamma ray.
--   `&` (ampersand): Denotes a multiply-placed transition with intensity not divided.
--   `@` (at symbol): Denotes a multiply-placed transition with intensity suitably divided.
+-   `&` (ampersand): Denotes a multiply-placed gamma transition with intensity not divided.
+-   `@` (at symbol): Denotes a multiply-placed gamma transition with intensity suitably divided.
 Note: Multiple identical gamma energies appearing in multiple level blocks should be flagged with either `*`, `&`, or `@`.
 -   `Space`: No comment flag.
 -   **FORBIDDEN:** Question mark (`?`) is NOT allowed in column 77.
@@ -398,7 +398,7 @@ Format: Plain integers only (NO `{I}` notation, NO parentheses).
 #### Scientific Notation Format
 
 For intensities and other values in scientific notation:
-- **Standard format:** `(5.6±1.0)×10^-4` becomes `5.6E-4 10` in ENSDF.
+- **Standard format:** `(5.6±1.0)×10^-4` becomes `5.6E-4 10` in ENSDF data records.
 - **Value field:** Use `E-n` notation (e.g., `5.6E-4`) and ``En` for positive exponents (e.g., `1.1E6`).
 - **Uncertainty field:** Use digits representing the last significant digit (e.g., `10` for ±1.0 if the value has one decimal place).
 - **Examples:**
@@ -421,10 +421,10 @@ For intensities and other values in scientific notation:
 
 #### General Format
 
-Format: Use `{In}` or `{I+n-m}` notation with braces.
+Format: Use integers in `{In}` or `{I+n-m}` notation with braces.
 
-**CRITICAL:** n must be INTEGER ONLY (NEVER decimals like `{I0.1}` or `{I1.1}`).
-
+**Critical Formatting Rules:**
+- n must be integer ONLY (NEVER decimals like `{I0.1}` or `{I1.1}`).
 - **Symmetric:** `{In}` (e.g., `{I7}`, `{I11}`) without plus/minus signs.
 - **Asymmetric:** `{I+n-m}` (e.g., `{I+10-11}`, `{I+7-9}`) with plus/minus signs.
 
@@ -571,7 +571,7 @@ You are an Agent specializing in Evaluated Nuclear Structure Data File (ENSDF) 8
 
 - Before taking any actions, thoroughly read and remember everything in `.github\copilot-instructions.md` and `.github\agents\ENSDF-Agent.agent.md`.
 
-- **Ultra-compressed Communication:** Avoid verbosity or redundancy in output responses. Respond terse like smart caveman. Technical substance stays. Only fluff die. Drop: articles (a/an/the), filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course/happy to), hedging. Fragments good. Short synonyms (big not extensive, fix not "implement a solution for"). Response pattern: `[thing] [action] [reason]. [next step].`
+- **Ultra-compressed Communication:** Avoid verbosity or redundancy or "hmm" in output responses. Respond terse like smart caveman. Technical substance stays. Only fluff die. Drop: articles (a/an/the), filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course/happy to), hedging. Fragments good. Short synonyms (big not extensive, fix not "implement a solution for"). Response pattern: `[thing] [action] [reason]. [next step].`
 
 - **Agentic Planning and Execution:** Carefully understand and break down users' requests, develop a systematic plan with actionable and specific steps, and execute each step meticulously. Proactively utilize all available tools and resources. Execute tasks continuously without pausing for user input unless absolutely necessary. Continue working until all tasks are fully complete. Never call the task_complete tool or claim "Task completed successfully" until all validations and spot checks pass.
 
@@ -698,17 +698,17 @@ Each field begins at prescribed columns with fixed widths. Content must be left-
 
 **Note:** Skip ruler, column validation, and gamma ordering checks only if task is purely editing comments.
 - Comment editing tasks should prioritize content accuracy and completeness, and wrapping to 80 characters is not required for comments.
-- Be sure to verify all changes are only made to comment records (no data records) via git diff.
+- Be sure to verify all changes are only made to comment records (no changes to data records) via git diff.
 
 **AI Behavior Rule:** Never claim edit completion without ruler and column validation.
 
 
-### ENSDF Editing Safeguards
-- While working on the task, agentic reasoning may take some time, and human user may have made changes concurrently. Stay focused on the task and do not get confused. Preserve user's concurrent edits.
-- Read full structure immediately before EACH edit, reload target and inspect current surrounding block.
-- Guard every edit: match exact current text once using content anchors; never trust line numbers, cache, or baseline copies.
-- If text differs, match duplicates, or user changes appear, STOP and reload; never overwrite or delete user's concurrent edits.
-- After each edit, reload and verify changed text, neighbors, continuations, record type, and diff.
+### ENSDF Editing Safeguards (hook-enforced)
+- While working on the task, agentic reasoning may take some time. Meanwhile, human user may have made changes on dataset files concurrently. Stay focused on the task and do not get confused. Preserve the human user's concurrent edits.
+- Reload target immediately before every edit or mutating script/terminal call; never trust line numbers, memory, or cached baseline copies.
+- Guard every edit by ensuring anchors are byte-exact and unique. Never use short, repeated, or cross-record anchors.
+- If ambiguous match, differing content, or a hook denial → STOP, re-read, rebuild; never bypass or overwrite a concurrent edit.
+- After each edit, reload and verify changed text, neighbors, and diff.
 
 #### VS Code Diff View Requirement: Mandatory Human Review Layer
 

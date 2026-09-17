@@ -4,7 +4,7 @@
       {
         "type": "command",
         "command": "python \"${PLUGIN_ROOT}/hooks/scripts/block-root-file-creation.py\"",
-        "windows": "powershell -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/hooks/scripts/block-root-file-creation.ps1\"",
+        "windows": "python \"${PLUGIN_ROOT}/hooks/scripts/block-root-file-creation.py\"",
         "timeout": 10
       },
       {
@@ -12,13 +12,19 @@
         "command": "python \"${PLUGIN_ROOT}/hooks/scripts/block-git-revert.py\"",
         "windows": "powershell -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/hooks/scripts/block-git-revert.ps1\"",
         "timeout": 10
+      },
+      {
+        "type": "command",
+        "command": "python \"${PLUGIN_ROOT}/hooks/scripts/guard_ens_edit.py\"",
+        "windows": "python \"${PLUGIN_ROOT}/hooks/scripts/guard_ens_edit.py\"",
+        "timeout": 20
       }
     ],
     "PostToolUse": [
       {
         "type": "command",
-        "command": "python \"${PLUGIN_ROOT}/hooks/scripts/validate_ens.py\"",
-        "windows": "python \"${PLUGIN_ROOT}/hooks/scripts/validate_ens.py\"",
+        "command": "python \"${PLUGIN_ROOT}/hooks/scripts/verify_ens_edit.py\"",
+        "windows": "python \"${PLUGIN_ROOT}/hooks/scripts/verify_ens_edit.py\"",
         "timeout": 30
       }
     ]

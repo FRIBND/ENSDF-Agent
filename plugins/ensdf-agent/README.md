@@ -29,7 +29,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 ## Prerequisites
 
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
-- Windows users: Python must be invokable as `python` from terminal (the hooks also ship `.ps1` fallbacks for `block-root-file-creation` and `block-git-revert`; `validate_ens` requires Python on all platforms).
+- Windows users: Python must be invokable as `python` from terminal.
 
 ## Installation
 
@@ -41,13 +41,14 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Hooks
 
-Three hooks in `hooks.json` use the same base format as [workspace hooks](https://code.visualstudio.com/docs/agent-customization/hooks#_hook-configuration-format). All fire automatically for any active agent while the plugin is enabled.
+Four hooks in `hooks.json` use the same base format as [workspace hooks](https://code.visualstudio.com/docs/agent-customization/hooks#_hook-configuration-format). All fire automatically for any active agent while the plugin is enabled.
 
 | Hook | Event | Blocks | Allows |
 |------|-------|--------|--------|
-| `block-root-file-creation` | PreToolUse | `create_file` at workspace root, `A<N>/`, or `XUNDL/` | `.github/temp/`; non-`create_file` tools |
+| `block-root-file-creation` | PreToolUse | File/directory creation, patch add-file, or terminal writes at workspace root, `A<N>/`, or `XUNDL/` | `.github/temp/`; non-write tools |
 | `block-git-revert` | PreToolUse | `git restore`/`git checkout` on `.ens` or non-temp paths; bare `checkout` | temp-scoped restore/checkout; `git switch`; unrelated commands |
-| `validate_ens` | PostToolUse | Non-ASCII `.ens` content; data-record ruler failures | Comment-only edits; non-`.ens` files |
+| `guard_ens_edit` | PreToolUse | Stale `.ens` edits, repeated/mismatched anchors, edits over 8 lines, `.ens` `apply_patch` | Fresh unique anchored edits of 8 lines or fewer; reads |
+| `verify_ens_edit` | PostToolUse | Non-ASCII `.ens` content; data-record 80-column ruler failures | Comment-only edits; non-`.ens` files |
 
 
 ## Caveats
