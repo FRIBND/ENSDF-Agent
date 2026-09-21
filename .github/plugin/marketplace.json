@@ -1,7 +1,7 @@
 ﻿{
   "name": "ensdf-agent",
   "metadata": {
-    "description": "FRIB Nuclear Data plugin marketplace 鈥?ENSDF nuclear data evaluation tools and agents",
+    "description": "FRIB Nuclear Data plugin marketplace - ENSDF nuclear data evaluation tools and agents",
     "version": "0.4.6",
     "pluginRoot": "./plugins"
   },
