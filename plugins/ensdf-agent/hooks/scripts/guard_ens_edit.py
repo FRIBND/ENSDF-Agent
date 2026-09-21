@@ -23,10 +23,15 @@ If text changed or matches zero/multiple times, hook denies edit.
 
 PostToolUse validation stays with verify_ens_edit.py (ASCII + 80-column ruler).
 
+Token lifecycle (state.json, one-shot):
+issued by   read_file
+consumed by each verified edit / mutating terminal command
+preserved   by read-only tools (a read never consumes its own token)
+
 Normal edit flow:
-AI reads current file
+AI reads current file          (token issued)
 AI builds exact oldText → newText edit
-Hook hash matches → edit allowed
+Hook hash matches → edit allowed (token consumed after PostToolUse verify)
 
 Concurrent edit flow:
 AI reads file
@@ -36,6 +41,10 @@ Hook detects hash mismatch → deny
 AI rereads current file
 AI rebuilds anchor
 AI retries → edit allowed
+
+Approved .ens edit tools: editFiles and replacement tools with exact oldText/newText.
+apply_patch on .ens is refused. PostToolUse compares actual content with this hook's
+predicted result, catching editor-side block collapse or unexpected rewrites.
 
 """
 import hashlib
@@ -49,6 +58,7 @@ SPAN = 8  # max lines in one oldString
 ENS_PATH_RE = re.compile(r"[^\s\"']+\.ens", re.IGNORECASE)
 MUTATING_RE = re.compile(r"--fix\b|>>?\s|Set-Content|Out-File|Add-Content|\.write_text\(|WriteAllText", re.IGNORECASE)
 EDIT_TOOLS = {"replace_string_in_file", "multi_replace_string_in_file", "editFiles", "edit/editFiles"}
+READ_TOOLS = {"read_file", "readFile", "read/readFile"}
 
 
 def deny(reason):
@@ -158,34 +168,137 @@ def edit_operations(data):
     return operations, paths
 
 
-def guard_edits(data, state, root):
-    """Check exact anchors for all supported edit payload shapes."""
-    operations, paths = edit_operations(data)
-    if paths and not operations:
-            deny(".ens edit has no exact old/new text anchor. Use editFiles with files[].edits[].oldText/newText.")
+def guard_operations(operations, state, root):
+    """Check exact anchors for ordered operations and predict resulting hashes."""
     by_file = {}
     for path, old, new in operations:
-        by_file.setdefault(key_of(path, root), []).append((old, new))
+        if not path.lower().endswith(".ens"):
+            continue
+        by_file.setdefault(key_of(path, root), []).append((old.replace("\r\n", "\n"),
+                                                            new.replace("\r\n", "\n")))
 
     touched = False
     for key, ops in by_file.items():
         text = read(key)
         if text is None:
             deny(f"Cannot read {os.path.basename(key)}.")
-        if state.get(key) != digest(text):
-            deny(f"{os.path.basename(key)} changed since your last read/edit (concurrent edit). "
+        expected = state.get(key)
+        if expected is None:
+            deny(f"No fresh-read token for {os.path.basename(key)} (tokens are one-shot: issued by read_file, "
+                 f"consumed by each verified edit) — this is not a concurrent-edit warning. "
+                 f"Re-read the file, then retry the edit.")
+        if expected != digest(text):
+            deny(f"{os.path.basename(key)} changed on disk since your last read/edit (concurrent edit). "
                  f"Re-read the surrounding block, rebuild the anchor, retry. Never overwrite a concurrent edit.")
         for old, new in ops:
             hits = text.count(old)
             if hits != 1:
                 deny(f"Anchor matches {hits} time(s) in {os.path.basename(key)}; must match byte-exactly once. "
-                     f"Rebuild oldString from the current 80-column text — short or repeated anchors are forbidden.")
+                     f"Rebuild the current patch hunk from the file — short or repeated anchors are forbidden.")
             if len(old.split("\n")) > SPAN:
                 deny(f"Edit spans more than {SPAN} lines. Split it into record-group edits.")
-            text = text.replace(old, new, 1)  # simulate so state matches the file the tool is about to write
+            text = text.replace(old, new, 1)
         state[key] = digest(text)
         touched = True
     return touched
+
+
+def comment_patch_operations(patch_text, root):
+    """Extract one-line c-record replacements with optional unique context."""
+    operations = []
+    current_path = None
+    hunk = None
+
+    def flush():
+        nonlocal hunk
+        if current_path and hunk is not None:
+            old_lines = []
+            new_lines = []
+            old_indexes = []
+            new_indexes = []
+            for line in hunk:
+                if line.startswith("-"):
+                    old_indexes.append(len(old_lines))
+                    old_lines.append(line[1:])
+                elif line.startswith("+"):
+                    new_indexes.append(len(new_lines))
+                    new_lines.append(line[1:])
+                elif line.startswith(" "):
+                    old_lines.append(line[1:])
+                    new_lines.append(line[1:])
+            if len(old_indexes) != 1 or len(new_indexes) != 1:
+                deny("Only one anchored cL/cG replacement is allowed per .ens apply_patch hunk.")
+            old_line = old_lines[old_indexes[0]]
+            new_line = new_lines[new_indexes[0]]
+            if old_line[6:7] != "c" or new_line[6:7] != "c":
+                deny("Only single anchored cL/cG apply_patch replacements are allowed for .ens files.")
+            text = read(key_of(current_path, root))
+            if text is None:
+                deny(f"Cannot read {os.path.basename(key_of(current_path, root))}.")
+            file_lines = text.split("\n")
+            matches = []
+            for index in range(len(file_lines) - len(old_lines) + 1):
+                if all(file_lines[index + offset].rstrip() == source.rstrip()
+                       for offset, source in enumerate(old_lines)):
+                    matches.append(index)
+            if len(matches) != 1:
+                deny(f"Comment anchor/context matches {len(matches)} time(s); rebuild it from the current file.")
+            comment_index = matches[0] + old_indexes[0]
+            operations.append((current_path, text, comment_index, new_line.rstrip()))
+        hunk = None
+
+    for line in patch_text.splitlines():
+        if line.startswith("*** Update File: "):
+            flush()
+            current_path = line.split(": ", 1)[1].strip()
+            continue
+        if line.startswith("*** "):
+            flush()
+            current_path = None
+            continue
+        if line.startswith("@@"):
+            flush()
+            hunk = []
+            continue
+        if hunk is not None:
+            hunk.append(line)
+    flush()
+    if not operations:
+        deny(".ens apply_patch requires one exact single-line cL/cG replacement.")
+    return operations
+
+
+def guard_comment_operations(operations, state, root):
+    """Guard comment replacements while preserving exact current file context."""
+    touched = False
+    for path, original, comment_index, new_line in operations:
+        key = key_of(path, root)
+        text = read(key)
+        if text is None:
+            deny(f"Cannot read {os.path.basename(key)}.")
+        expected = state.get(key)
+        if expected is None:
+            deny(f"No fresh-read token for {os.path.basename(key)} (tokens are one-shot: issued by read_file, "
+                 f"consumed by each verified edit) — this is not a concurrent-edit warning. "
+                 f"Re-read the file, then retry the edit.")
+        if expected != digest(text):
+            deny(f"{os.path.basename(key)} changed on disk since your last read/edit (concurrent edit). "
+                 f"Re-read the surrounding block, rebuild the anchor, retry. Never overwrite a concurrent edit.")
+        lines = text.split("\n")
+        if comment_index >= len(lines) or lines[comment_index][6:7] != "c":
+            deny("Comment anchor no longer identifies a cL/cG record; reread and rebuild the edit.")
+        lines[comment_index] = new_line
+        state[key] = digest("\n".join(lines))
+        touched = True
+    return touched
+
+
+def guard_edits(data, state, root):
+    """Check exact anchors for all supported edit payload shapes."""
+    operations, paths = edit_operations(data)
+    if paths and not operations:
+            deny(".ens edit has no exact old/new text anchor. Use editFiles with files[].edits[].oldText/newText.")
+    return guard_operations(operations, state, root)
 
 
 def guard_terminal(command, state, root):
@@ -200,8 +313,12 @@ def guard_terminal(command, state, root):
         text = read(key)
         if text is None:
             continue
-        if state.get(key) != digest(text):
-            deny(f"{os.path.basename(key)} changed since your last read (concurrent edit). "
+        expected = state.get(key)
+        if expected is None:
+            deny(f"No fresh-read token for {os.path.basename(key)} — re-read the file before running "
+                 f"a command that rewrites it (this is not a concurrent-edit warning).")
+        if expected != digest(text):
+            deny(f"{os.path.basename(key)} changed on disk since your last read (concurrent edit). "
                  f"Re-read before running a command that rewrites this file.")
         state.pop(key, None)
         touched = True
@@ -216,7 +333,7 @@ def main():
     state_path = os.path.join(root, ".github", "temp", "ens_guard", "state.json")
     state = state_load(state_path)
 
-    if tool == "read_file":  # a read refreshes freshness
+    if tool in READ_TOOLS:  # a read refreshes freshness; verify skips reads so it is not consumed
         path = data.get("filePath", "")
         if path.lower().endswith(".ens"):
             text = read(key_of(path, root))
@@ -226,9 +343,11 @@ def main():
         return
 
     if tool == "apply_patch":
-        if re.search(r"\*\*\* (?:Update|Add|Delete) File: .*\.ens", data.get("input", "") or "", re.IGNORECASE):
-            deny("apply_patch on .ens files is refused — use replace_string_in_file/"
-                 "multi_replace_string_in_file or editFiles with exact old/new anchors so anchors can be verified.")
+        patch_text = data.get("input", "") or ""
+        if re.search(r"^\*\*\* (?:Update|Add|Delete) File: .*\.ens", patch_text, re.IGNORECASE | re.MULTILINE):
+            operations = comment_patch_operations(patch_text, root)
+            if guard_comment_operations(operations, state, root):
+                state_save(state, state_path)
         return
 
     if tool in ("run_in_terminal", "send_to_terminal"):

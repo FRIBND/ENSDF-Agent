@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import re
 import subprocess
@@ -16,8 +17,16 @@ EDIT_TOOLS = {"replace_string_in_file", "multi_replace_string_in_file", "editFil
 #   PASS 1 (always): ASCII-only check — blocks if any non-ASCII character
 #     found in the .ens file. Applies to ALL edits (data records AND comments).
 #
-#   PASS 2 (data only): 80-column ruler validation via ensdf_1line_ruler.py.
+#   PASS 2 (always when guard supplied an expectation): actual content must match
+#     the PreToolUse predicted result, catching editor-side block collapse.
+#
+#   PASS 3 (data only): 80-column ruler validation via ensdf_1line_ruler.py.
 #     Skipped for comment-only edits (per ENSDF-Agent.agent.md).
+#
+#   Token policy: only mutating calls (edits / apply_patch / create_file /
+#     mutating terminal) consume the one-shot PreToolUse token. Read-only
+#     calls exit early and never touch guard state — a read issues the token
+#     that the immediately following edit depends on.
 #
 # Key features:
 #   - Handles all VS Code file-editing tool input shapes
@@ -52,6 +61,44 @@ def load_input():
         return json.loads(raw)
     except json.JSONDecodeError:
         return {}
+
+
+def file_digest(path):
+    with open(path, "r", encoding="utf-8", newline="") as fh:
+        text = fh.read().replace("\r\n", "\n")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def pop_expected_hashes(paths, cwd):
+    """Return post-edit hash mismatches, then consume one-shot expectations."""
+    state_path = os.path.join(cwd, ".github", "temp", "ens_guard", "state.json")
+    try:
+        with open(state_path, encoding="utf-8") as fh:
+            state = json.load(fh)
+    except (OSError, ValueError):
+        return []
+
+    mismatches = []
+    consumed = False
+    for path in paths:
+        absolute = os.path.realpath(resolve_path(path, cwd))
+        expected = state.get(absolute)
+        if not expected:
+            continue
+        consumed = True
+        try:
+            actual = file_digest(absolute)
+        except OSError:
+            actual = None
+        if actual != expected:
+            mismatches.append((absolute, expected, actual))
+        state.pop(absolute, None)
+
+    if consumed:
+        os.makedirs(os.path.dirname(state_path), exist_ok=True)
+        with open(state_path, "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+    return mismatches
 
 
 def path_value(item):
@@ -310,8 +357,29 @@ def validate_ens_ascii(abs_path):
     return False, "\n".join(lines)
 
 
+def is_mutating_call(payload):
+    """True only for calls that can rewrite .ens content.
+
+    Read-only calls must never consume guard tokens: PreToolUse issues a
+    token on each read and the immediately following edit depends on it.
+    Popping tokens for read calls caused false
+    "changed since your last read/edit (concurrent edit)" denials.
+    """
+    tool = payload.get("tool_name", "")
+    if tool in EDIT_TOOLS or tool in ("apply_patch", "create_file"):
+        return True
+    command = (payload.get("tool_input") or {}).get("command")
+    return isinstance(command, str) and "--dry-run" not in command and bool(MUTATING_RE.search(command))
+
+
 def main():
     payload = load_input()
+    tool = payload.get("tool_name", "")
+
+    # Read-only calls: nothing to validate; the guard token must survive.
+    if tool in ("read_file", "readFile", "read/readFile"):
+        emit({})
+        return
 
     # Collect all .ens files touched by this edit
     ens_paths = find_all_ens_paths(payload)
@@ -319,9 +387,27 @@ def main():
         emit({})
         return
 
+    cwd = payload.get("cwd", "") or os.getcwd()
+    mismatches = pop_expected_hashes(ens_paths, cwd) if is_mutating_call(payload) else []
+    if mismatches:
+        files = "\n".join(f"  {path}" for path, _, _ in mismatches)
+        emit({
+            "decision": "block",
+            "reason": (
+                "ENSDF post-edit content differs from the PreToolUse prediction. "
+                "The edit may have collapsed, expanded, or otherwise rewritten an unintended block.\n"
+                f"Affected file(s):\n{files}\n"
+                "Re-read the affected block, inspect the diff, and rebuild a smaller exact edit."
+            ),
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": "Predicted post-edit hash did not match actual file content.",
+            },
+        })
+        return
+
     # ===== PASS 1: ASCII-only validation (ALWAYS — data records AND comments) =====
     # Non-ASCII characters are forbidden in .ens files regardless of record type.
-    cwd = payload.get("cwd", "") or os.getcwd()
     ascii_errors = []
     for path in ens_paths:
         abs_path = resolve_path(path, cwd)
