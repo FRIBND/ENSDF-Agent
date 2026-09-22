@@ -15,7 +15,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Development Timeline
 
-- 2026-09-17: Guard-edit Hook was introduced to prevent AI-human concurrent editing conflicts.
+- 2026-09-17: Guard-edit Hook was introduced to resolve AI-human concurrent editing conflicts.
 - 2026-08-13: ENSDF-Agent Harness was introduced at the 2026 Low Energy Community Meeting at ANL.
 - 2026-08-11: Migrated ENSDF-Agent Plugin to [Agent Plugins 1.0](https://agent-plugins.org/) open standard format.
 - 2026-05-07: ENSDF-Agent Harness was refined for improved token efficiency, consuming <30K input tokens in one round.
