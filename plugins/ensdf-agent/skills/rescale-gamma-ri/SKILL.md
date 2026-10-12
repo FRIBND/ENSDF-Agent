@@ -1,5 +1,5 @@
 ---
-name: rescaling-gamma-ri
+name: rescale-gamma-ri
 description: Rescales G-record relative intensities (RI) and their uncertainties within a single adopted level block when the contributing datasets use different RI=100 normalization references.
 ---
 
@@ -17,6 +17,8 @@ ENSDF record/field definitions, column positions, uncertainty notation: `.github
 4. Round value and σ together per `.github/skills/rounding/SKILL.md`; align decimal places and avoid over-rounding σ.
 5. Add `cG RI$other: RI' {Iσ'} from REACTION.`; delete superseded average comments and continuations.
 6. Never average RI values with different references; rescaling exposes the disagreement.
+
+**Attribution check** - to identify which dataset an adopted RI came from, rescale each candidate source by its block factor k and compare value *and* uncertainty: DRI_adopted = k*DRI_src*10^(decimals_adopted-decimals_src). An exact value+DRI match identifies the source; a smaller adopted DRI means the field came from elsewhere (or the reference gamma's DRI was deliberately dropped).
 
 **Safeguards** — verify level/gamma identity and source normalization before arithmetic. After editing, assert adopted fields are unchanged, rescaled comments match the calculation, and old average text is absent.
 

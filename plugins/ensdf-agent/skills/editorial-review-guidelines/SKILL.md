@@ -20,6 +20,7 @@ Column/field rules: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.
 ## Error Classes
 
 ### 1. ENSDF Notation
+
 - **Superscript/subscript:** Symbol outside braces. Wrong: `{+13C}` → Correct: `{+13}C`. Detection regex (correct form): `{+[0-9]+}[A-Z][a-z]?`
 - **Plain isotope tokens:** Wrong: `3He`, `36S(d,3He)` → Correct: `{+3}He`, `{+36}S(d,{+3}He)`. Scan: `(?<!\{\+)\b\d{1,3}[A-Z][a-z]?\b`; keep valid element symbols; exclude tokens followed by `|` (e.g., `2I|g`). **Mandatory:** after the regex scan, manually review every remaining candidate — regex misses tokens in dense prose.
 - **Missing `{I}` on uncertainty:** Comment uncertainties require `{In}` or `{I+n-m}`. Three patterns:
@@ -40,6 +41,7 @@ Column/field rules: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.
 - **Subscript used as negative exponent:** `10{-n}` (renders as subscript) must be `10{+-n}` (negative superscript). Scan: `10\{-\d+\}` . Applies to all scientific-notation contexts (`\|*10\{-`, `E\{-`, `×10\{-` in raw Unicode).
 
 ### 2. Grammar and Style
+
 - **Capitalization:**
   - Top-block comments (before first data record, any type, (`c  `, `cL $`, `cG  $`, `cL J$`, `cL J(A)$`, etc.)) → uppercase.
   - Record-specific (after first data record comments) **with** field identifier (`cL E$`, `cL J$`, `cL T$`, `cG E$`, `cG RI$`, `cG M$`, etc.) → lowercase, unless first token is numeral, symbol, isotope token, or acronym.
@@ -55,14 +57,17 @@ Column/field rules: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.
 - **Adjective/noun errors:** `others levels` → `other levels`.
 
 ### 3. Punctuation and Lists
+
 - Comma splice between independent clauses → semicolon.
 - Oxford comma required in lists of 3 or more items; only one `and` (at final item).
 - Wrong: `14.9 {I6} (R1), and 8.3 {I4} (R2), and 10.5 {I60} (R3)` → Correct: `14.9 {I6} (R1), 8.3 {I4} (R2), and 10.5 {I60} (R3)`.
 
 ### 4. Hyphenation
+
 - Compound modifier before noun: `4-mm-long target`, `gamma-ray spectrum`, `R-matrix analysis`, `2-g/cm{+2} Pb target`.
 - Predicative: no hyphen (`the target was 4 mm long`).
 - Always: `half-life`, `L-transfer`, `L-transfers`. Noun: `gamma rays`; adjective: `gamma-ray energy`.
+- Exception: keep `J=L transfer` unhyphenated when `J=L` denotes the `J=L`, `J=L-1`, or `J=L+1` analyzing-power cases; this is not the compound noun `L-transfer`.
 
 ### 5. Terminology and Spelling
 
@@ -86,40 +91,59 @@ Column/field rules: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.
 | `striped` | `stripped` |
 | `·coeffcients·` | `coefficients` |
 
-
 - `GXPF1A` — exact capitalization required (shell-model interaction name).
 - **Chemical formulas:** Use `{-n}` subscripts for stoichiometry. `CD{-2}` (deuterated polyethylene) ≠ `Cd{-2}` (cadmium); verify against publication.
 
 ### 6. Text and Number Integrity
+
 - **Extra space after `=`:** `|w|g= 0.45` → `|w|g=0.45`. Scan: `=\s[0-9]`.
 - **Missing space surrounding `=`:** `Intensity=0.45` → `Intensity = 0.45`.
 - **Space within number:** `E{-p}(lab)=54 6` → `E{-p}(lab)=546`. Note: space between value and uncertainty is correct.
 - **Field cross-contamination:** Energy in `RI$` or intensity in `E$` is an error. Wrong: `cG RI$ weighted average of 1224.6 {I154} ...` (contains energy, not intensity).
 
 ### 7. Logical Clarity
+
 - Flag contradictory claims (confirmed and tentative in same sentence).
 - Flag conclusions without citation or method reference.
 
-## Exclusions
+## Cautionary Notes
+
 Missing terminal periods, XREF notation. Valid ENSDF symbols: `|?`, `{+n}`, `{-n}`, `|a`, `|b`, `|g`, `|d`, `|w`, `|*`, `|+`, `|-`.
 - Never strip a leading `|`: `|<` = ≤, `|>` = ≥, `|*` = ×. A leading `|` is never a stray artifact.
 - Comment lines need not be padded to 80 columns (human wraps later); still confirm the diff is comment-only (col 7 = `c`).
+- Comment-unit order inside one L/G block: identifiers run `E$` → `RI$` → `M$` → `MR$` → general (no identifier before `$`). A general comment sitting ahead of `M$`/`MR$` is a violation that `check_gamma_ordering.py` reports; read its COMMENT ORDERING section, not just the gamma/level ordering.
+- Before reordering a checker-flagged comment block, verify its L/G-record boundary: comment-order findings can span adjacent levels and be false positives.
+- Two datasets reporting the same value must share one clause; never demote an agreeing value to `Other:` (see the lifetime SKILL). Sentence-initial `Other:` is capitalized, identifier-adjacent `$other:` is lowercase.
+- When a fix changes a line's trailing pad count, re-measure that line's length in the same turn: a replacement whose length differs from the matched span can relocate one space to the match boundary and yield 79/81-column lines.
+- LaTeX/HTML leaked from a digest is a per-line repair: convert `$^{37}\text{Cl}(d,^3\text{He})^{36}\text{S}$` to `{+37}Cl(d,{+3}He){+36}S` and re-wrap the block (the replacement is shorter, so pads change).
+- The 80-column all-space line that ends a file is part of the ENSDF submission format: never delete it, and treat a missing one as a repair candidate rather than noise.
+- `d`/`D` (col 7) hidden-message records are free-text notes, not comments: never length-check or reword them.
 - Values quoted in comments must name the specific gamma/level/multipolarity record and match it character-for-character — see `comment-quoted-values-check`.
+- A capital that starts a new sentence (including after abbreviations such as `g.s.`, `m.s.`, `r.m.s.`) is not a capitalization error; do not lowercase it.
+- Bare `|<`, `|>`, `|=` in comment should not convert to `<`, `>`, `=`.
+- Column 78–79 findings are data errors, never `misplaced flags`: legal content there is L `MS` (`M `, `M1`/`M2`, `R `, `C `), G col-79 `N` (normalization), B/E `UN` (`1U`/`2U`), blank elsewhere. Never relocate these to column 77; `column_calibrate.py` and the ruler are record-type aware.
+- G-record cols 33–76 are deliberately dense (M|MR|DMR|CC|DCC|TI all adjacent); `DCC` (63–64) touching `TI` (65–74) renders glued, e.g. `0.1656 24100` — do not insert a readability space or shift TI.
 
 ## Editing Discipline
+
 - Use minimal single-line anchors; multi-line anchors spanning wrapped comment text can re-wrap lines and silently drop words.
+- When two comment lines are byte-identical, disambiguate the anchor with the following line's text, and keep the padding arithmetic (insert chars / drop N pad spaces) inside the same edit. After editing, re-check the file's line count and every line's length, because a replacement that begins with a newline can lose it and merge two records.
+- Comment-line layout: `NUCID` + continuation (col 6) + `c` (col 7) + record code (cols 8-9, e.g. `L `, `G `, or two blanks) + text at col 10, i.e. a 9-character prefix. A flag shifted into column 6 or column 8 makes the line unrecognizable (both directions are now reported by the validators), so assert `line[6]=='c'` and `line[9]!=' '` in any generating script instead of trusting a passing scan.
 - After each file's edits, prove the diff is comment-only (changed lines have `c`/`d` in col 7) and no text was lost (word-level compare against `git show HEAD:<file>`).
 - Find the top block by skipping lines whose col 7 is `c`/`d`; `P`/`N` records count as data records, and `cP`/`cN` stay uppercase.
 - Add a recurring class to `scan_editorial_review.py` CHECKS with a `--selftest` case instead of writing ad-hoc sweep scripts; run it one path at a time.
+- Report every edit as a literal before → after pair quoting the exact changed words, so the human user can track each change.
 
 ## Procedure
-1. Run `python .github/scripts/scan_editorial_review.py [folder_or_file] --skip adopted` — automated sweeps (isotope tokens, bare `I`, braced `{I}`, units, chemical formulas, dittography, `$`/`=` space, `10{-n}`, unicode, leaked tags, spelling). Review every flagged line; discard false positives manually.
+
+1. Run `python .github/scripts/scan_editorial_review.py [folder_or_file] --skip adopted` — automated sweeps (isotope tokens, bare `I`, braced `{I}`, units, chemical formulas, dittography, `$`/`=` space, `10{-n}`, unicode, leaked tags, spelling). Review every flagged line; discard false positives manually. The glob is one level deep: pass the folder that directly holds the `.ens` files, not its parent.
 2. Apply error classes in order: notation → grammar → punctuation → hyphenation → terminology → integrity → clarity.
 3. Manually scan the remaining lines for regex-missed issues (dense prose, capitalization, subject-verb, hyphenation) per the Error Classes above.
 4. Final symbol sweep on all flagged lines: verify no raw Unicode glyphs, plain isotope tokens, mixed symbol-text compounds, or un-subscripted chemical formulas were missed.
 5. Before reporting: confirm no valid ENSDF notation misclassified; each fix preserves scientific meaning. Do not edit unless user explicitly requests.
 
 ## Output Format
+
 ```
 | File | Line(s) | Category | Current Text | Recommended | Rationale |
 |------|---------|----------|--------------|-------------|-----------|

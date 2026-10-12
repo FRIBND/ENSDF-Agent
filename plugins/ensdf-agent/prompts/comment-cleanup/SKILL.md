@@ -18,6 +18,7 @@ ENSDF 80-column data record and field definitions, structural rules, column posi
 **Principle:** Establish the most common data source as default in a general comment, then document exceptions individually.
 
 ### General Comment Format
+
 ```
  NUCID cG E,RI$From {DOMINANT_DATASET} unless otherwise noted. E|g values 
  NUCID2cG without uncertainties are deduced from level-energy differences.       
@@ -30,21 +31,27 @@ ENSDF 80-column data record and field definitions, structural rules, column posi
 | E or RI from default dataset only | No individual comment needed |
 | E|g without uncertainty | No comment needed (deduced from level difference) |
 | Weighted/unweighted average from multiple datasets | Add cG E$ or cG RI$ with average details |
-| Intensities normalized to different references | Rescale to one reference, adopt its RI/DRI, move others to `RI$other` → `.github/skills/rescaling-gamma-ri/SKILL.md` |
+| Intensities normalized to different references | Rescale to one reference, adopt its RI/DRI, move others to `RI$other` → `.github/skills/rescale-gamma-ri/SKILL.md` |
 | Value from non-default dataset | Add cG E$ or cG RI$ stating source |
-| Other values exist but not used for averaging | Add "other: VALUE from DATASET" |
-| M or MR without a stated basis | Add `cG M$`/`cG M,MR$` with the measured basis (γ(θ), γγ(θ), ADO) and RUL, after confirming it in the raw `.mrg` G-record comments |
+| Other values exist but not used for averaging | Add `other: VALUE from DATASET` |
+| M or MR without a stated basis | Add `cG M$`/`cG M,MR$` with the measured basis (γ(θ), γγ(θ), ADO) after confirming it in the raw `.mrg` G-record comments; cite the RUL clause only when the adopted M field is firm — a tentative field (`D(+Q)`, `M1(+E2)`, `(M1+E2)`) leaves Q open, so M2 is never RUL ruled out |
 | Unit supplies both M and MR | Tag the unit `M,MR$`; per-gamma identifiers name every field their source supplies, so `M$` never carries mixing-ratio text |
 
 ### Comment Ordering
 
 Order comment units in each `cL`/`cG` block per `.github/agents/ENSDF-Agent.agent.md`
 (general comment last). Move whole units (first line plus continuations) unchanged — no
-text edits, no renumbering, no data-record changes. Within one `cG M,MR$` unit, list
+text edits, no renumbering, no data-record changes. Swapping two adjacent units exchanges
+their padding because their text lengths differ: replace both whole lines and recompute
+trailing spaces so each stays exactly 80 characters, changing padding only (content bytes
+must be identical to the pre-edit lines). Within one `cG M,MR$` unit, list
 measured bases before the level-scheme/RUL clause, and keep each per-gamma identifier
 scoped to the fields its source supplies. Validate with `.github/scripts/`:
 `ensdf_1line_ruler.py`, `check_gamma_ordering.py`, `column_calibrate.py`; re-check that
 every line stays exactly 80 characters after each edit — editor tooling can strip padding.
+Reload the file before extending a dataset general-comment block: a human may have
+concurrently reworded or prefixed a line, leaving it over or under 80 characters. Keep
+their wording and re-wrap the whole paragraph instead of re-padding the single line.
 
 ### What to Avoid
 
@@ -52,19 +59,25 @@ every line stays exactly 80 characters after each edit — editor tooling can st
 - ❌ Redundant comments restating the default source
 - ❌ Individual cG E,RI$ for gammas that match the general comment default
 - ❌ Comments for deduced energies (no uncertainty = level difference)
+- ❌ Markup pasted from a digest: LaTeX (`$^{37}\text{Cl}(d,^3\text{He})^{36}\text{S}$`), markdown bold/table pipes, or HTML must be rewritten in ENSDF notation (`{+37}Cl(d,{+3}He){+36}S`) before it reaches a comment line
 
 ## Execution Checklist
 
 1. Identify dominant dataset for E,RI and set it in the general `cG E,RI$` comment.
 2. For each gamma with quoted uncertainty:
-	- From default only → no individual `cG E$`/`cG RI$` comment
-	- From multiple datasets → add weighted/unweighted average comment
-	- From non-default dataset → add source comment, with `Other:` values when applicable
+    - From default only → no individual `cG E$`/`cG RI$` comment
+    - From multiple datasets → add weighted/unweighted average comment
+    - From non-default dataset → add source comment, with `Other:` values when applicable
 3. Remove redundant individual comments that merely restate the default source.
 4. Order each level/gamma comment block per `.github/agents/ENSDF-Agent.agent.md`,
-	moving whole units (first line + continuations).
+    moving whole units (first line + continuations).
 5. Keep deduced E|g values (no uncertainty) undocumented at per-gamma level unless an explicit exception is required.
 6. For each M/MR assignment, confirm the basis against the raw `.mrg` G-record comments and cite that same source, named by its reaction (e.g. `in {+24}Mg({+16}O,|a2p|g)`) so the basis stays traceable.
+7. Match reaction wording in dataset general comments to the ID-line
+    target(projectile,ejectile) order and prime notation; re-check after any human edit of the ID line.
+8. When moving a sentence between dataset-level and record-level scope, re-emit the target
+    prefix with its identifier (`cL $`) and re-place the whole unit so block order and the
+    wrapping of the source block stay intact.
 
 ## Completion Criteria
 
@@ -76,4 +89,3 @@ every line stays exactly 80 characters after each edit — editor tooling can st
 For general comment ordering at the beginning of Adopted files, see
 `.github/skills/general-comments-ordering/SKILL.md`. Full record/column rules:
 `.github/agents/ENSDF-Agent.agent.md`.
-

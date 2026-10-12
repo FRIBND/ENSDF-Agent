@@ -1,6 +1,6 @@
 ---
 name: data-cross-check
-description: "Checks target data in ENS files against source data for exact consistency after data entry. Use when validating target data in ENS files against source data from CSV, Markdown, MRG, ENS, or ADP files, including values, uncertainties, signs, limits, decimal digits, units, provenance comments, strings, XREFs, and completeness."
+description: "Checks target data in ENS files against source data for exact consistency. Use when validating target data in ENS files against source data from CSV, Markdown, MRG, ENS, or ADP files, including values, uncertainties, signs, limits, decimal digits, units, provenance comments, strings, XREFs, and completeness."
 ---
 
 # Data Cross-Check
@@ -16,19 +16,23 @@ Actively leverage coding, scripts, and programming tools when necessary to effec
 > Fill in before starting task. Update as needed.
 
 ### Files
+
 - Source: `[path to source .mrg/.adp/.ens/.md/.csv file]`
 - Target: `[path to target .ens file]`
 
 ### Field Mapping *(source → ENS)*
+
 - `[Data A]` → `[record type]` `[field name]`
 - `[Data B]` → `[record type]` `[field name]`
 - `[Data C]` → `[record type]` `[comment]`
 
 ### Matching
+
 - L-records: `[ ]` exact E  `[ ]` E within ±[N] keV
 - G-records: `[ ]` exact Eγ  `[ ]` Eγ within ±[N] keV  `[ ]` matching parent Level first, matching then γ
 
 ### Checks
+
   [ ] value and sign
   [ ] uncertainty and format
   [ ] decimal places and trailing zeros
@@ -38,6 +42,7 @@ Actively leverage coding, scripts, and programming tools when necessary to effec
   [ ] completeness (missing/extra)
 
 ### Special Handling
+
 - `[ ]` [describe non-standard cases]
 
 ## Recommended Operating Procedure:
@@ -56,8 +61,22 @@ Actively leverage coding, scripts, and programming tools when necessary to effec
 ## Required Matching Rules
 
 - Never match a gamma by Eγ alone; match parent L-record first. For near-equal energies, use both level energy and transition energy for accurate matching.
+- Source of truth is only the designated source. When source and target disagree, the source wins; report the target value as a mismatch instead of justifying it.
 - Numerical Exactness: see `.github/agents/ENSDF-Agent.agent.md` § Numerical Exactness.
 
+## Adopted E(level) Traceability
+
+- Read provenance notes before judging a level undocumented: unqualified general `cL E$` sets the fit default for all levels; letter-qualified general notes (`cL E(X)$`) cover every level whose L-record **column 77 flag letter** is X (the flag letter, not the XREF letters, matches the note identifier).
+- A fit basis exists only if the level has ≥1 gamma with DE; with no G-records or DE-less gammas, E must be a dataset-measured level energy — compare byte-exact E and DE against the level's XREF datasets, honoring `Letter(value)`/`Letter(*)`/`Letter(?)` letter-by-letter (parentheses bind to the preceding letter only).
+- The XREF notation itself pins the source: a plain unparenthesised letter means that dataset's E agrees with the adopted value, while `Letter(value)` deliberately records a dataset energy that was **not** adopted. If exactly one plain letter's dataset L-record matches adopted E and DE byte-exact, the level is traceable by reading the adopted file alone — never report it as undocumented; reserve the note/flag check for levels with no unique byte-exact plain source.
+- A plain L-record has columns 6–7 blank and `L` in column 8; `X` or another letter in column 6 marks an XREF/continuation record and must not start a new level block when attaching comments.
+- Report only levels a reader cannot resolve from the adopted file: no unique byte-exact plain XREF source, and no fit basis, own `cL E$` note, or col-77 flag note. Flag DE blank/non-blank mismatch with the source level as advisory.
+
+## Adopted-Sourced J and T Fields
+
+- When a dataset declares `cL J,T$From the Adopted Levels.` (or a per-level `cL J$From the Adopted Levels`), every L-record J and T must equal the Adopted dataset: an empty J where adopted carries a Jπ is a warning, and a differing Jπ is an inconsistency — fix by copying the adopted string byte-for-byte and keep the dataset's own `cL J$` note that explains the assignment's origin.
+- Jπ not sourced from adopted (own log `{Ift}`, p|g(|q), or shell model) may legitimately be broader than adopted: never narrow it, and never generalise an adopted-sourced value into a wider range.
+- Match a dataset level to its adopted counterpart through the adopted XREF letters, not by nearest energy: counterpart energies may differ well beyond the adopted uncertainty (e.g., 4723 vs 4710.1), and `Letter(?)`/`Letter(*)` bind only to the immediately preceding letter.
 
 ## Report Output
 

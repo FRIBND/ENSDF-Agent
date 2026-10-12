@@ -9,6 +9,8 @@ L-record and G-record data fields. Detects discrepancies in:
   2. Multipolarities — quoted multipolarity vs. G-record M field (cols 33-41)
   3. Level energies  — quoted level energy vs. L-record E field
   4. J-pi notation   — quoted J-pi vs. L-record J field (cols 23-39)
+  5. Level designator — quoted level energy followed by the "level" keyword
+  6. Energy conservation — |E_own_level - E_quoted| vs. quoted |g energy
 
 ENSDF CONVENTIONS RECOGNIZED:
 
@@ -16,6 +18,16 @@ ENSDF CONVENTIONS RECOGNIZED:
     - Comments use g.s. to denote ground state transitions
     - Data fields record ground state energy as 0.0 keV
     - These are semantically equivalent: no error flagged for g.s. vs 0.0
+
+  Measured vs. character multipolarity:
+    - A measured D/Q composition fixes the multipole orders and ΔJ but not
+      the electromagnetic character. Once the character is fixed (by RUL or by
+      the level scheme), the M field holds a character form while a cL J$
+      argument legitimately quotes the measured form it was derived from:
+      quoting "D, |DJ=1" for an "(E1)" record describes the same transition,
+      so no error is flagged for such a pair.
+    - A different multipole order is still a mismatch (e.g. quoted "D" for an
+      "M1+E2" record).
 
 This script is read-only: it never modifies any files.
 
@@ -26,9 +38,11 @@ Usage:
 """
 
 import argparse
+import math
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -38,7 +52,6 @@ from typing import Dict, List, Optional, Tuple
 RED = '\033[91m'
 GREEN = '\033[92m'
 YELLOW = '\033[93m'
-CYAN = '\033[96m'
 BOLD = '\033[1m'
 RESET = '\033[0m'
 
@@ -53,6 +66,7 @@ class Level:
     energy_str: str        # original string (preserves trailing zeros)
     jpi: str               # spin-parity as written in cols 23-39
     line_num: int
+    energy_uncertainty: Optional[float] = None
 
     def __repr__(self) -> str:
         return f"Level({self.energy_str}, {self.jpi!r}, line {self.line_num})"
@@ -66,6 +80,7 @@ class Gamma:
     multipolarity: str     # cols 33-41, stripped
     parent_energy: float   # energy of the parent level
     line_num: int
+    energy_uncertainty: Optional[float] = None
 
     def __repr__(self) -> str:
         return (f"Gamma({self.energy_str}, M={self.multipolarity!r}, "
@@ -79,18 +94,30 @@ class QuotedRef:
     gamma_energy: float
     multipolarity: Optional[str]        # e.g. "M1+E2" or None
     direction: str                      # "from" or "to"
-    level_energy_str: str               # e.g. "1991" or "g.s."
-    level_energy: Optional[float]       # None when "g.s."
+    level_energy_str: str               # energy, "g.s.", or empty if omitted
+    level_energy: Optional[float]       # None for "g.s." or an omitted energy
     jpi: str                            # e.g. "7/2-"
     line_num: int                       # starting line of cL J$ block
     context: str                        # matched text snippet
+    block_level: Optional[float] = None  # energy of the owning L-record
+    missing_level_identifier: bool = False
+
+
+@dataclass
+class LevelQuote:
+    """A level energy quoted in a cL J$ comment block."""
+    jpi: str
+    level_str: str
+    line_num: int
+    context: str
+    has_designator: bool
 
 
 @dataclass
 class Finding:
     """A single verification finding."""
     code: str              # e.g. GAMMA_NOT_FOUND, JPI_MISMATCH
-    severity: str          # "ERROR" or "INFO"
+    severity: str          # "ERROR" or "WARNING"
     line: int
     context: str
     message: str
@@ -102,11 +129,44 @@ class Finding:
 # ---------------------------------------------------------------------------
 # Parsers
 # ---------------------------------------------------------------------------
-def parse_levels(filepath: Path) -> Dict[float, Level]:
+def dataset_ranges(filepath: Path) -> List[Tuple[int, int]]:
+    """Return 1-based [start, end) ranges for datasets in an ENSDF file."""
+    with open(filepath, 'r', encoding='utf-8') as fh:
+        lines = fh.readlines()
+
+    starts = [
+        i for i, line in enumerate(lines, start=1)
+        if (len(line) >= 10 and line[5:9] == '    '
+            and line[0:5].strip() and line[9:80].strip())
+    ]
+    if not starts:
+        return [(1, len(lines) + 1)]
+    if starts[0] > 1:
+        starts.insert(0, 1)
+    ends = starts[1:] + [len(lines) + 1]
+    return list(zip(starts, ends))
+
+
+def parse_energy_uncertainty(value_str: str, field: str) -> Optional[float]:
+    """Convert ENSDF DE digits to an absolute energy uncertainty in keV."""
+    digits = field.strip()
+    if not digits.isdigit():
+        return None
+    try:
+        value = Decimal(value_str)
+    except InvalidOperation:
+        return None
+    return float(Decimal(digits).scaleb(value.as_tuple().exponent))
+
+
+def parse_levels(filepath: Path,
+                 line_range: Optional[Tuple[int, int]] = None) -> Dict[float, Level]:
     """Parse all L-records and build {energy: Level} dictionary."""
     levels: Dict[float, Level] = {}
     with open(filepath, 'r', encoding='utf-8') as fh:
         for i, line in enumerate(fh, start=1):
+            if line_range is not None and not line_range[0] <= i < line_range[1]:
+                continue
             if len(line) < 10:
                 continue
             # Data L-record: col 6 blank, col 7 blank, col 8 = 'L'
@@ -126,16 +186,20 @@ def parse_levels(filepath: Path) -> Dict[float, Level]:
             except ValueError:
                 continue
             jpi = line[22:39].strip() if len(line) > 39 else line[22:].strip()
-            levels[energy] = Level(energy, energy_str, jpi, i)
+            levels[energy] = Level(energy, energy_str, jpi, i,
+                                   parse_energy_uncertainty(energy_str, line[19:21]))
     return levels
 
 
-def parse_gammas(filepath: Path, *, debug: bool = False) -> List[Gamma]:
+def parse_gammas(filepath: Path, *, debug: bool = False,
+                 line_range: Optional[Tuple[int, int]] = None) -> List[Gamma]:
     """Parse all G-records and build list of Gamma objects."""
     gammas: List[Gamma] = []
     current_level_energy: Optional[float] = None
     with open(filepath, 'r', encoding='utf-8') as fh:
         for i, line in enumerate(fh, start=1):
+            if line_range is not None and not line_range[0] <= i < line_range[1]:
+                continue
             if len(line) < 10:
                 continue
             col6 = line[5:6]
@@ -170,7 +234,9 @@ def parse_gammas(filepath: Path, *, debug: bool = False) -> List[Gamma]:
                     mul = line[31:41].strip()
                 else:
                     mul = line[32:41].strip() if len(line) > 41 else ''
-                gammas.append(Gamma(energy, e_str, mul, current_level_energy, i))
+                gammas.append(Gamma(
+                    energy, e_str, mul, current_level_energy, i,
+                    parse_energy_uncertainty(e_str, line[19:21])))
                 if debug:
                     print(f"  G-rec line {i}: E={e_str}  M={mul!r}  parent={current_level_energy}")
     return gammas
@@ -179,21 +245,30 @@ def parse_gammas(filepath: Path, *, debug: bool = False) -> List[Gamma]:
 # ---------------------------------------------------------------------------
 # cL J$ comment extraction
 # ---------------------------------------------------------------------------
-def extract_quoted_refs(filepath: Path) -> List[QuotedRef]:
-    """Extract all quoted gamma/level references from cL J$ comment blocks."""
+def extract_quoted_refs(
+        filepath: Path,
+        line_range: Optional[Tuple[int, int]] = None,
+) -> Tuple[List[QuotedRef], List[LevelQuote]]:
+    """Extract quoted gamma references and level quotations from cL J$ blocks."""
     refs: List[QuotedRef] = []
+    level_quotes: List[LevelQuote] = []
     with open(filepath, 'r', encoding='utf-8') as fh:
         lines = fh.readlines()
 
     in_j_block = False
     block_lines: List[str] = []
     block_start = 0
+    current_level: Optional[float] = None
 
     def flush_block() -> None:
         if block_lines:
-            refs.extend(_parse_j_block(block_lines, block_start))
+            refs.extend(_parse_j_block(block_lines, block_start, current_level))
+            level_quotes.extend(
+                _find_level_quotes(block_lines, block_start))
 
     for i, line in enumerate(lines, start=1):
+        if line_range is not None and not line_range[0] <= i < line_range[1]:
+            continue
         if len(line) < 10:
             if in_j_block:
                 flush_block()
@@ -227,15 +302,61 @@ def extract_quoted_refs(filepath: Path) -> List[QuotedRef]:
                 flush_block()
                 in_j_block = False
                 block_lines = []
+            # Data L-record: the level owning the comments that follow
+            if col6 == ' ' and col7 == ' ' and col8 == 'L':
+                try:
+                    current_level = float(line[9:19])
+                except ValueError:
+                    current_level = None
 
     # End of file
     if in_j_block:
         flush_block()
-    return refs
+    return refs, level_quotes
 
 
-def _parse_j_block(texts: List[str], start_line: int) -> List[QuotedRef]:
-    """Parse a merged cL J$ text block into QuotedRef objects."""
+_MISSING_LEVEL_TARGET = re.compile(
+    r'^\s*(?P<jpi>'
+    r'\(\s*\d+(?:/\d+)?[+-]?(?:\s*,\s*\d+(?:/\d+)?[+-]?)*\s*\)[+-]?'
+    r'|\d+(?:/\d+)?(?:[+-]|\([+-]\))'
+    r'(?:\s*,\s*(?:\(\d+(?:/\d+)?[+-]?\)|\d+(?:/\d+)?(?:[+-]|\([+-]\))))*'
+    r')(?=\s|[,;.]|$)'
+)
+
+
+_LEVEL_QUOTE = re.compile(
+    r'\b(?:to|from)\s+'
+    r'(?P<jpi>(?:\([^()]*\)|[0-9/()+,\- ]){1,24}?)\s*,\s*'
+    r'(?P<level>g\.s\.|\d+(?:\.\d+)?)'
+    r'(?:-keV)?'
+    # A token followed by +/- is another J-pi list item; one followed by |g
+    # is a gamma energy, not a quoted level energy.
+    r'(?![0-9]|\.[0-9]|[+-]|\|g)'
+    r'(?P<suffix>\s+(?:level|resonance)\b)?')
+
+
+def _find_level_quotes(texts: List[str], line_num: int) -> List[LevelQuote]:
+    """Extract every level energy quoted in a cL J$ comment block.
+
+    Scans the whole block, so comments that quote a level without quoting the
+    gamma energy (e.g. "E1+M2 |DJ=1 |g to 2+, 2128 level") are covered too.
+    """
+    full = re.sub(r'\s+', ' ', ' '.join(text.strip() for text in texts))
+    quotes: List[LevelQuote] = []
+    for match in _LEVEL_QUOTE.finditer(full):
+        quotes.append(LevelQuote(
+            jpi=match.group('jpi').strip(' ,;'),
+            level_str=match.group('level'),
+            line_num=line_num,
+            context=match.group(0).strip(' ,;'),
+            has_designator=bool(match.group('suffix')),
+        ))
+    return quotes
+
+
+def _parse_j_block(texts: List[str], start_line: int,
+                  block_level: Optional[float] = None) -> List[QuotedRef]:
+    """Parse references, retaining J-pi endpoints that omit a level energy."""
     full = ' '.join(text.strip() for text in texts)
     full = re.sub(r'\s+', ' ', full)
     full = full.replace('ground state', 'g.s.')
@@ -250,7 +371,7 @@ def _parse_j_block(texts: List[str], start_line: int) -> List[QuotedRef]:
         text = text.lstrip(' ,;')
 
         match = re.match(
-            r'(?P<jpi>[^.]+?)\s*,?\s*(?P<level>g\.s\.)(?=\s|[,;(]|$)',
+            r'(?P<jpi>[0-9/()+\-, ]{1,24}?)\s*,?\s*(?P<level>g\.s\.)(?=\s|[,;(]|$)',
             text,
         )
         if match:
@@ -296,9 +417,12 @@ def _parse_j_block(texts: List[str], start_line: int) -> List[QuotedRef]:
             level_str = match.group('level')
             return match.group('jpi').strip(' ,;'), level_str, float(level_str)
 
-        # Pattern 3b: jpi, level (comma-separated)
+        # Pattern 3b: jpi, level (comma-separated). A parenthesised Jpi list
+        # such as "(3,4)" is consumed as one token so its internal comma is not
+        # mistaken for the separator before the level energy.
         match = re.match(
-            r'(?P<jpi>.+?)\s*,\s*(?P<level>\d+(?:\.\d+)?)(?!\.\d)'
+            r'(?P<jpi>(?:\([^()]*\)|[0-9/()+,\- ]){1,24}?)\s*,\s*'
+            r'(?P<level>\d+(?:\.\d+)?)(?!\.\d)'
             r'(?:\s+(?:level|resonance))?',
             text,
         )
@@ -321,10 +445,16 @@ def _parse_j_block(texts: List[str], start_line: int) -> List[QuotedRef]:
         after_direction = span[direction_match.end():]
 
         target = parse_target(after_direction)
-        if target is None:
-            continue
-
-        jpi, level_str, level_energy = target
+        missing_level_identifier = target is None
+        if missing_level_identifier:
+            missing_target = _MISSING_LEVEL_TARGET.match(after_direction)
+            if missing_target is None:
+                continue
+            jpi = missing_target.group('jpi').strip(' ,;')
+            level_str = ''
+            level_energy = None
+        else:
+            jpi, level_str, level_energy = target
 
         multipolarity: Optional[str] = None
         cleaned_between = between.replace('(|q)', ' ').strip(' ,;')
@@ -351,6 +481,8 @@ def _parse_j_block(texts: List[str], start_line: int) -> List[QuotedRef]:
             jpi=jpi,
             line_num=start_line,
             context=context,
+            block_level=block_level,
+            missing_level_identifier=missing_level_identifier,
         ))
 
     return results
@@ -373,11 +505,16 @@ def find_closest_level(levels: Dict[float, Level], energy: float,
 
 
 def find_closest_gamma(gammas: List[Gamma], energy: float,
-                       window: float) -> Optional[Gamma]:
-    """Return the closest Gamma within *window* keV, or None."""
+                       window: float,
+                       parent_energy: Optional[float] = None) -> Optional[Gamma]:
+    """Return closest Gamma within *window*, scoped to its parent level."""
+    candidates = gammas
+    if parent_energy is not None:
+        candidates = [g for g in gammas
+                      if abs(g.parent_energy - parent_energy) <= window]
     best: Optional[Gamma] = None
     best_diff = float('inf')
-    for g in gammas:
+    for g in candidates:
         d = abs(g.energy - energy)
         if d <= window and d < best_diff:
             best_diff = d
@@ -385,28 +522,105 @@ def find_closest_gamma(gammas: List[Gamma], energy: float,
     return best
 
 
+def find_gamma_to_level(gammas: List[Gamma], energy: float,
+                        level_energy: float, window: float) -> Optional[Gamma]:
+    """Find an explicitly quoted deexciting Gamma by final level, then E?."""
+    candidates = [
+        g for g in gammas
+        if (abs(g.energy - energy) <= window
+            and abs((g.parent_energy - level_energy) - g.energy) <= window)
+    ]
+    return min(candidates, key=lambda g: abs(g.energy - energy), default=None)
+
+
+# ---------------------------------------------------------------------------
+# Multipolarity equivalence
+# ---------------------------------------------------------------------------
+# A measured D/Q composition fixes the multipole orders and ΔJ but not the
+# electromagnetic character. Once the character is fixed -- by RUL or by the
+# level scheme -- the record's M field holds a character form, while a cL J$
+# argument legitimately quotes the measured form it was derived from, e.g.
+# "D, |DJ=1" for an "(E1)" record. Such pairs describe the same transition.
+MEASURED_TO_CHARACTER: Dict[str, Tuple[str, ...]] = {
+    'D': ('E1', 'M1', '(E1)', '(M1)', '[E1]', '[M1]',
+          '[E1,M1]', '[M1,E1]'),
+    'Q': ('E2', 'M2', '(E2)', '(M2)', '[E2]', '[M2]',
+          '[E2,M2]', '[M2,E2]'),
+    'D+Q': ('E1+M2', 'M1+E2', '(E1+M2)', '(M1+E2)', '[E1+M2]', '[M1+E2]',
+            '[E1+M2,M1+E2]', '[M1+E2,E1+M2]', '[M1,E2]', '[E2,M1]'),
+    'D(+Q)': ('E1(+M2)', 'M1(+E2)', '(E1(+M2))', '(M1(+E2))', '[E1(+M2)]',
+              '[M1(+E2)]', '[E1(+M2),M1(+E2)]', '[M1(+E2),E1(+M2)]'),
+}
+
+
+def _dominant_multipolarity(value: str) -> str:
+    """Leading (dominant) multipole of an M field: 'E1(+M2)' -> 'E1'."""
+    return re.split(r'[+(]', value.strip().lstrip('(['))[0].strip()
+
+
+def multipolarity_equivalent(first: str, second: str) -> bool:
+    """True when a measured D/Q form and its character form agree.
+
+    The two strings must describe the same multipole orders; they may differ
+    only in whether the electromagnetic character is stated.
+    """
+    a, b = first.strip(), second.strip()
+    if a == b:
+        return True
+    for measured, characters in MEASURED_TO_CHARACTER.items():
+        if ((a == measured and b in characters)
+                or (b == measured and a in characters)):
+            return True
+    # a comment may quote only the dominant component of a mixed multipolarity
+    # (e.g. "E1" for a G-record whose M field is "E1(+M2)")
+    return a == _dominant_multipolarity(b) or b == _dominant_multipolarity(a)
+
+
 # ---------------------------------------------------------------------------
 # Verification
 # ---------------------------------------------------------------------------
-_EPS = 1e-6   # floating-point equality threshold
-
-
 def verify(refs: List[QuotedRef], levels: Dict[float, Level],
            gammas: List[Gamma], window: float) -> List[Finding]:
     """Cross-check every QuotedRef against L/G-records."""
     findings: List[Finding] = []
 
     for ref in refs:
-        # --- Gamma energy ---
-        g = find_closest_gamma(gammas, ref.gamma_energy, window)
-        if g is None:
+        if ref.missing_level_identifier:
             findings.append(Finding(
-                code='GAMMA_NOT_FOUND', severity='ERROR',
+                code='MISSING_LEVEL_ENERGY', severity='ERROR',
                 line=ref.line_num, context=ref.context,
-                message=f'No G-record within {window} keV of '
-                        f'{ref.gamma_energy_str} keV',
-                quoted=ref.gamma_energy_str,
+                message=(f'Quoted {ref.direction} J-pi "{ref.jpi}" without '
+                         f'a specific level energy or g.s. designation'),
+                quoted=ref.jpi,
             ))
+
+        # --- Gamma energy: identify its parent level before matching E? ---
+        if ref.missing_level_identifier and ref.direction == 'from':
+            g = None
+        elif ref.direction == 'to':
+            parent_energy = ref.block_level
+            g = find_closest_gamma(gammas, ref.gamma_energy, window,
+                                   parent_energy)
+            if ref.level_energy is not None:
+                if (g is not None
+                        and abs((g.parent_energy - ref.level_energy) - g.energy)
+                        <= window):
+                    pass
+                else:
+                    g = find_gamma_to_level(gammas, ref.gamma_energy,
+                                            ref.level_energy, window) or g
+        else:
+            g = find_closest_gamma(gammas, ref.gamma_energy, window,
+                                   ref.level_energy)
+        if g is None:
+            if not ref.missing_level_identifier:
+                findings.append(Finding(
+                    code='GAMMA_NOT_FOUND', severity='ERROR',
+                    line=ref.line_num, context=ref.context,
+                    message=f'No G-record within {window} keV of '
+                            f'{ref.gamma_energy_str} keV',
+                    quoted=ref.gamma_energy_str,
+                ))
         else:
             # Gamma energy must match EXACTLY character-for-character
             if g.energy_str != ref.gamma_energy_str:
@@ -423,7 +637,9 @@ def verify(refs: List[QuotedRef], levels: Dict[float, Level],
 
         # --- Multipolarity ---
         if ref.multipolarity is not None and g is not None:
-            if g.multipolarity != ref.multipolarity:
+            # A measured form and the character form derived from it describe
+            # the same transition, so they are not a mismatch.
+            if not multipolarity_equivalent(ref.multipolarity, g.multipolarity):
                 findings.append(Finding(
                     code='MULTIPOLARITY_MISMATCH', severity='ERROR',
                     line=ref.line_num, context=ref.context,
@@ -434,7 +650,8 @@ def verify(refs: List[QuotedRef], levels: Dict[float, Level],
                 ))
 
         # --- Level energy ---
-        if ref.level_energy is not None:
+        if (ref.level_energy is not None
+                and not ref.missing_level_identifier):
             lvl = find_closest_level(levels, ref.level_energy, window)
             if lvl is None:
                 findings.append(Finding(
@@ -449,7 +666,7 @@ def verify(refs: List[QuotedRef], levels: Dict[float, Level],
                 # EXCEPTION: g.s. notation in comments is equivalent to 0.0 in data
                 # (ENSDF convention: ground state written as g.s. in comments)
                 is_ground_state_match = (
-                    ref.level_energy_str == 'g.s.' and lvl.energy_str == '0.0'
+                    ref.level_energy_str == 'g.s.' and lvl.energy == 0.0
                 )
                 if not is_ground_state_match and lvl.energy_str != ref.level_energy_str:
                     findings.append(Finding(
@@ -471,7 +688,8 @@ def verify(refs: List[QuotedRef], levels: Dict[float, Level],
                         quoted=ref.jpi,
                         actual=lvl.jpi,
                     ))
-        elif ref.level_energy_str == 'g.s.':
+        elif (ref.level_energy_str == 'g.s.'
+              and not ref.missing_level_identifier):
             # Ground state: find level at 0 keV
             lvl = find_closest_level(levels, 0.0, window)
             if lvl is not None and lvl.jpi != ref.jpi:
@@ -484,7 +702,118 @@ def verify(refs: List[QuotedRef], levels: Dict[float, Level],
                     actual=lvl.jpi,
                 ))
 
+        # --- Energy conservation uses the matched transition's endpoints ---
+        if g is not None and ref.level_energy is not None:
+            if ref.direction == 'to':
+                initial_level = g.parent_energy
+                final_level = ref.level_energy
+            else:
+                initial_level = ref.level_energy
+                final_level = ref.block_level
+            if final_level is None:
+                continue
+            deviation = abs(abs(initial_level - final_level)
+                            - ref.gamma_energy)
+            uncertainty_terms = [g.energy_uncertainty]
+            if ref.direction == 'to':
+                parent = find_closest_level(levels, g.parent_energy, window)
+                if parent is not None:
+                    uncertainty_terms.append(parent.energy_uncertainty)
+                final = find_closest_level(levels, final_level, window)
+                if final is not None:
+                    uncertainty_terms.append(final.energy_uncertainty)
+            else:
+                parent = find_closest_level(levels, initial_level, window)
+                final = find_closest_level(levels, final_level, window)
+                if parent is not None:
+                    uncertainty_terms.append(parent.energy_uncertainty)
+                if final is not None:
+                    uncertainty_terms.append(final.energy_uncertainty)
+            combined_uncertainty = math.sqrt(sum(
+                uncertainty ** 2 for uncertainty in uncertainty_terms
+                if uncertainty is not None))
+            deviation = max(0.0, deviation - combined_uncertainty)
+            if deviation > 5.0:
+                findings.append(Finding(
+                    code='ENERGY_CONSERVATION_ERROR', severity='ERROR',
+                    line=ref.line_num, context=ref.context,
+                    message=(f'{ref.gamma_energy_str}|g between '
+                             f'{ref.block_level} and {ref.level_energy_str} keV '
+                             f'deviates by {deviation:.2f} keV'),
+                    diff_kev=deviation,
+                ))
+            elif deviation > 2.0:
+                findings.append(Finding(
+                    code='ENERGY_CONSERVATION_WARNING', severity='WARNING',
+                    line=ref.line_num, context=ref.context,
+                    message=(f'{ref.gamma_energy_str}|g between '
+                             f'{ref.block_level} and {ref.level_energy_str} keV '
+                             f'deviates by {deviation:.2f} keV'),
+                    diff_kev=deviation,
+                ))
+
     return findings
+
+
+def verify_level_quotes(quotes: List[LevelQuote], levels: Dict[float, Level],
+                        window: float) -> List[Finding]:
+    """Check every quoted level energy against the L-records."""
+    findings: List[Finding] = []
+    for quote in quotes:
+        level_str = quote.level_str.replace('-keV', '')
+        is_gs = level_str == 'g.s.'
+        if not is_gs and not quote.has_designator:
+            findings.append(Finding(
+                code='MISSING_LEVEL_SUFFIX', severity='ERROR',
+                line=quote.line_num, context=quote.context,
+                message=(f'Quoted level "{level_str}" is not followed by '
+                         f'the designator "level"'),
+                quoted=level_str,
+            ))
+        energy = 0.0 if is_gs else float(level_str)
+        lvl = find_closest_level(levels, energy, window)
+        if lvl is None:
+            findings.append(Finding(
+                code='LEVEL_NOT_FOUND', severity='ERROR',
+                line=quote.line_num, context=quote.context,
+                message=(f'No L-record within {window} keV of '
+                         f'{level_str} keV'),
+                quoted=level_str,
+            ))
+            continue
+        # g.s. in comments is equivalent to 0.0 in the data records
+        if not is_gs and lvl.energy_str != level_str:
+            findings.append(Finding(
+                code='LEVEL_ENERGY_MISMATCH', severity='ERROR',
+                line=quote.line_num, context=quote.context,
+                message=(f'Quoted "{level_str}" keV, '
+                         f'L-record has "{lvl.energy_str}" keV'),
+                quoted=level_str,
+                actual=lvl.energy_str,
+                diff_kev=abs(lvl.energy - energy),
+            ))
+        if quote.jpi and lvl.jpi != quote.jpi:
+            findings.append(Finding(
+                code='JPI_MISMATCH', severity='ERROR',
+                line=quote.line_num, context=quote.context,
+                message=(f'Quoted J-pi "{quote.jpi}", '
+                         f'L-record J field is "{lvl.jpi}"'),
+                quoted=quote.jpi,
+                actual=lvl.jpi,
+            ))
+    return findings
+
+
+def dedupe(findings: List[Finding]) -> List[Finding]:
+    """Drop findings reported by both the gamma and the block-level scan."""
+    seen: set[Tuple[str, int, str, str]] = set()
+    unique: List[Finding] = []
+    for finding in findings:
+        key = (finding.code, finding.line, finding.quoted, finding.actual)
+        if key not in seen:
+            seen.add(key)
+            unique.append(finding)
+    return unique
 
 
 # ---------------------------------------------------------------------------
@@ -494,7 +823,7 @@ def print_report(filepath: Path, findings: List[Finding],
                  n_refs: int, n_levels: int, n_gammas: int) -> None:
     """Print human-readable verification report."""
     errors = [f for f in findings if f.severity == 'ERROR']
-    infos  = [f for f in findings if f.severity == 'INFO']
+    warnings = [f for f in findings if f.severity == 'WARNING']
 
     print()
     print('=' * 80)
@@ -504,7 +833,7 @@ def print_report(filepath: Path, findings: List[Finding],
           f'Quoted references: {n_refs}')
     print('=' * 80)
     print()
-    print(f'  ERRORS: {len(errors)}')
+    print(f'  ERRORS: {len(errors)}   WARNINGS: {len(warnings)}')
     print()
 
     if errors:
@@ -517,9 +846,21 @@ def print_report(filepath: Path, findings: List[Finding],
             print(f'      Context: {f.context}')
             print()
 
+    if warnings:
+        print('-' * 80)
+        print(f'{YELLOW}{BOLD}WARNINGS{RESET}')
+        print('-' * 80)
+        for i, f in enumerate(warnings, 1):
+            print(f'  {YELLOW}#{i} [{f.code}]{RESET}  line {f.line}')
+            print(f'      {f.message}')
+            print(f'      Context: {f.context}')
+            print()
+
     print('=' * 80)
     if errors:
         print(f'{RED}RESULT: {len(errors)} error(s) found — all must be fixed{RESET}')
+    elif warnings:
+        print(f'{YELLOW}RESULT: No errors; {len(warnings)} warning(s) to review{RESET}')
     else:
         print(f'{GREEN}RESULT: All quoted values match records exactly.{RESET}')
     print('=' * 80)
@@ -553,21 +894,30 @@ def main() -> None:
         print(f'Error: file not found: {filepath}', file=sys.stderr)
         sys.exit(2)
 
-    # Parse data records
+    # Parse and verify one dataset at a time; merged files reuse energies.
     print(f'Parsing {filepath.name} ...')
-    levels = parse_levels(filepath)
-    gammas = parse_gammas(filepath, debug=args.debug)
-    print(f'  Levels: {len(levels)}    Gammas: {len(gammas)}')
-
-    # Extract quoted references from cL J$ comments
-    refs = extract_quoted_refs(filepath)
-    print(f'  Quoted references: {len(refs)}')
-
-    # Verify
-    findings = verify(refs, levels, gammas, window)
+    ranges = dataset_ranges(filepath)
+    findings: List[Finding] = []
+    n_levels = n_gammas = n_refs = n_level_quotes = 0
+    for line_range in ranges:
+        levels = parse_levels(filepath, line_range)
+        gammas = parse_gammas(filepath, debug=args.debug,
+                              line_range=line_range)
+        refs, level_quotes = extract_quoted_refs(filepath, line_range)
+        n_levels += len(levels)
+        n_gammas += len(gammas)
+        n_refs += len(refs)
+        n_level_quotes += len(level_quotes)
+        findings.extend(verify(refs, levels, gammas, window))
+        findings.extend(verify_level_quotes(level_quotes, levels, window))
+    findings = dedupe(findings)
+    print(f'  Dataset sections: {len(ranges)}')
+    print(f'  Levels: {n_levels}    Gammas: {n_gammas}')
+    print(f'  Quoted references: {n_refs}'
+          f'    Level quotes: {n_level_quotes}')
 
     # Report
-    print_report(filepath, findings, len(refs), len(levels), len(gammas))
+    print_report(filepath, findings, n_refs, n_levels, n_gammas)
 
     # Exit code: 1 if errors, 0 otherwise
     has_errors = any(f.severity == 'ERROR' for f in findings)

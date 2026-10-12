@@ -61,7 +61,7 @@ CHECKS = [
     ("sym-word",             r"\b(?:gamma|beta|alpha|theta|mu)(?:-|\s)(?:ray|rays|delayed|particle|particles|decay|emission|spectrum)\b"),
     ("dim-compound",         r"\d[\w/{}+\-|.]*?(?:cm|mm)\S*?\s+(?:long|thick|deep|wide|diameter|thickness)\b"),
     ("cite-comma",           r"(?:19|20)\d\d[A-Z][a-z]\w{1,3}\d+,(?=\S)|\w ,"),
-    ("unhyphenated",         r"\bhalf life\b|\bL transfers?\b"),
+    ("unhyphenated",         r"\bhalf life\b|(?<!J=)\bL transfers?\b"),
     ("leaked-tag",           r"\s(cL|cG|cB|cE|cN|cP|cQ)\s"),
 ]
 
@@ -105,11 +105,13 @@ def scan_line(text):
                 if el is None or el not in ELEMENTS:
                     continue
             # chemical formula: exclude NSR keys (1985Ra15), braced {I15},
-            # and all-caps acronyms/code names (CHUCK3, DWUCK4, GXPF1A)
+            # all-caps acronyms/code names (CHUCK3, DWUCK4, GXPF1A) and
+            # element counts of 0 (Ilford K0 is an emulsion code, not K0)
             prev = text[m.start() - 1] if m.start() > 0 else " "
             prev2 = text[m.start() - 2] if m.start() > 1 else " "
             if cat == "chem-formula" and (in_nsr_key(text, m.start()) or
                                           prev in "{+" or
+                                          tok.endswith("0") or
                                           (prev.isupper() and prev2.isupper())):
                 continue
             # NOTE: instrument names (S800, K1200, CH89) still match
@@ -157,6 +159,7 @@ _SELFTEST_CASES = [
     ("CHUCK3-CCBA analyses", "chem-formula", False),
     ("Targets were mixtures of H3BO3", "chem-formula", True),
     ("NaCl, CsI, GaP, MgO", "chem-formula", False),
+    ("they were detected by Ilford K0", "chem-formula", False),
     ("the target was 400 ug/cm2", "unit-ug", True),
     ("1500 um thick", "unit-um", True),
     ("1500-|mm-thick", "unit-um", False),
@@ -168,6 +171,8 @@ _SELFTEST_CASES = [
     ("10{+-3}", "neg-exp10", False),
     ("with 2I|g = 0.5", "isotope", False),
     ("1500-|mm-thick, 3-cm-long targets", "dim-compound", False),
+    ("L transfer from analyzing power", "unhyphenated", True),
+    ("J=L transfer from analyzing power", "unhyphenated", False),
 ]
 
 
