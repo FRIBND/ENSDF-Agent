@@ -5,19 +5,17 @@ Regenerates the plugins/ensdf-agent/ payload from the local ENSDF workspace
 Run order, see main():
   1. bump_versions()   - bump the version string in every file in version_files.
   2. sync_readme()     - copy repo-root README.md into the plugin if it changed.
-  3. sync_agent_file() - rebuild agents/ENSDF-Agent.agent.md from two source
-                         files: agents/ENSDF-Agent.agent.md (its `hooks:`
-                         frontmatter is stripped, since VS Code Agent Plugins
-                         don't support agent-scoped hooks - see hooks.json
-                         instead), injects canonical version into description,
-                         argument-hint, and title, and copilot-instructions.md,
-                         appended as a labeled section (it can't ship on its
-                         own). The output is fully rebuilt every run from
-                         whatever is currently on disk, so any edit to either
-                         source file is picked up on the next sync.
+  3. sync_agent_file() - rebuild ENSDF-Agent.agent.md in com.github.copilot/agents/
+                         and agents/ from source files: agents/ENSDF-Agent.agent.md
+                         (its `hooks:` frontmatter is stripped, since VS Code
+                         Agent Plugins don't support agent-scoped hooks), injects
+                         canonical version into description, argument-hint, and
+                         title, and copilot-instructions.md, appended as a labeled
+                         section. The output is fully rebuilt every run from
+                         whatever is currently on disk.
                          See build_merged_agent_content().
-  4. sync_plugin_hooks() - build the plugin-root hooks.json from the source
-                         workspace hook JSON and agent frontmatter hooks,
+  4. sync_plugin_hooks() - build hooks.json in com.github.copilot/hooks/ and root
+                         from source workspace hook JSON and agent frontmatter hooks,
                          deduplicate entries, and replace source-relative
                          .github/hooks paths with ${PLUGIN_ROOT}/hooks paths.
   5. sync()            - mirror-copy the rest of managed_entries (hooks/,
@@ -379,19 +377,25 @@ def build_plugin_hook_config(source_root: Path) -> dict:
 
 
 def sync_plugin_hooks(source_root: Path, plugin_root: Path, dry_run: bool) -> None:
-    """Regenerate plugin-root hooks.json from current source hook definitions."""
-    target = plugin_root / "hooks.json"
+    """Regenerate plugin hooks.json in com.github.copilot/hooks/ and root from source hook definitions."""
+    target_hooks = [
+        plugin_root / "com.github.copilot" / "hooks" / "hooks.json",
+        plugin_root / "hooks.json",
+    ]
     config = build_plugin_hook_config(source_root)
     generated = json.dumps(config, indent=2) + "\n"
-    existing = target.read_text(encoding="utf-8") if target.is_file() else None
 
-    if existing == generated:
-        print("SKIP   hooks.json (unchanged)")
-    elif dry_run:
-        print("COPY   hooks.json (generated from source hooks)")
-    else:
-        target.write_text(generated, encoding="utf-8")
-        print("COPIED hooks.json (generated from source hooks)")
+    for target in target_hooks:
+        existing = target.read_text(encoding="utf-8") if target.is_file() else None
+        rel_label = target.relative_to(plugin_root).as_posix()
+        if existing == generated:
+            print(f"SKIP   {rel_label} (unchanged)")
+        elif dry_run:
+            print(f"COPY   {rel_label} (generated from source hooks)")
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(generated, encoding="utf-8")
+            print(f"COPIED {rel_label} (generated from source hooks)")
 
 
 def strip_agent_hooks_block(agent_text: str) -> str:
@@ -536,14 +540,14 @@ def sync_agent_file(
     version: str | None = None,
     dry_run: bool = False,
 ) -> None:
-    """Regenerate the plugin's agent file from the current source files.
+    """Regenerate the plugin's agent file in com.github.copilot/agents/ and agents/ from source files.
 
     Reads source agents/ENSDF-Agent.agent.md + copilot-instructions.md fresh
     every run and rebuilds the merged output via build_merged_agent_content(),
     which also strips the source agent's agent-scoped `hooks:` frontmatter
     block (see strip_agent_hooks_block()), injects the canonical version, and
     appends the instructions file as a labeled section. The result is compared
-    verbatim (full-text equality) against the existing plugin file to decide
+    verbatim (full-text equality) against existing plugin files to decide
     COPIED/SKIP; there is no partial/section-level patch.
 
     Also deletes any stale standalone copilot-instructions.md left in the
@@ -551,8 +555,14 @@ def sync_agent_file(
     """
     source_agent = source_root / "agents" / "ENSDF-Agent.agent.md"
     source_instructions = source_root / "copilot-instructions.md"
-    target_agent = plugin_root / "agents" / "ENSDF-Agent.agent.md"
-    target_instructions = plugin_root / "copilot-instructions.md"
+    target_agents = [
+        plugin_root / "com.github.copilot" / "agents" / "ENSDF-Agent.agent.md",
+        plugin_root / "agents" / "ENSDF-Agent.agent.md",
+    ]
+    target_instructions = [
+        plugin_root / "copilot-instructions.md",
+        plugin_root / "com.github.copilot" / "copilot-instructions.md",
+    ]
 
     if not source_agent.is_file():
         print("SKIP   agents/ENSDF-Agent.agent.md (source not found)")
@@ -566,24 +576,28 @@ def sync_agent_file(
     )
     merged = build_merged_agent_content(agent_text, instructions_text, version)
 
-    existing = target_agent.read_text(encoding="utf-8") if target_agent.is_file() else None
-    if existing == merged:
-        print("SKIP   agents/ENSDF-Agent.agent.md (merged, unchanged)")
-    elif dry_run:
-        print("COPY   agents/ENSDF-Agent.agent.md (merged with copilot-instructions.md)")
-    else:
-        target_agent.parent.mkdir(parents=True, exist_ok=True)
-        target_agent.write_text(merged, encoding="utf-8")
-        print("COPIED agents/ENSDF-Agent.agent.md (merged with copilot-instructions.md)")
+    for target_agent in target_agents:
+        existing = target_agent.read_text(encoding="utf-8") if target_agent.is_file() else None
+        rel_label = target_agent.relative_to(plugin_root).as_posix()
+        if existing == merged:
+            print(f"SKIP   {rel_label} (merged, unchanged)")
+        elif dry_run:
+            print(f"COPY   {rel_label} (merged with copilot-instructions.md)")
+        else:
+            target_agent.parent.mkdir(parents=True, exist_ok=True)
+            target_agent.write_text(merged, encoding="utf-8")
+            print(f"COPIED {rel_label} (merged with copilot-instructions.md)")
 
     # copilot-instructions.md must not ship standalone — VS Code Agent Plugins
     # ignore it; remove any stale copy left in the plugin payload.
-    if target_instructions.is_file():
-        if dry_run:
-            print("REMOVE copilot-instructions.md (merged into agents/ENSDF-Agent.agent.md)")
-        else:
-            target_instructions.unlink()
-            print("REMOVED copilot-instructions.md (merged into agents/ENSDF-Agent.agent.md)")
+    for target_inst in target_instructions:
+        if target_inst.is_file():
+            rel_label = target_inst.relative_to(plugin_root).as_posix()
+            if dry_run:
+                print(f"REMOVE {rel_label} (merged into agents)")
+            else:
+                target_inst.unlink()
+                print(f"REMOVED {rel_label} (merged into agents)")
 
 
 def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
