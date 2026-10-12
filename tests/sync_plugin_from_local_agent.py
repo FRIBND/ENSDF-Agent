@@ -456,7 +456,6 @@ def build_merged_agent_content(agent_text: str, instructions_text: str) -> str:
     if instructions_body:
         sections.append(
             "\n---\n\n"
-            "## Workspace Copilot Instructions\n\n"
             "*(Concatenated from `copilot-instructions.md`.)*\n\n"
             + instructions_body
         )
