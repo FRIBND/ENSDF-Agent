@@ -13,8 +13,8 @@ Run order, see main():
     5. sync()              - mirror prompts/, scripts, and skills: copy changes,
                                                      remove stale files, skip unchanged/excluded files.
 
-plugin.json and icon.png are plugin-owned. Agent and hook outputs are generated
-in the Agent Plugins 1.0 Copilot namespace; legacy root copies are removed.
+plugin.json is plugin-owned. Agent and hook outputs are generated in the Agent
+Plugins 1.0 Copilot namespace; legacy root copies are removed.
 """
 
 from __future__ import annotations
@@ -449,7 +449,7 @@ def inject_agent_version(agent_text: str, version: str) -> str:
             old_hint = re.sub(r"^argument-hint:\s*", "", stripped).strip().strip('"\'')
             clean_hint = re.sub(r"\s*\(v\d+\.\d+\.\d+\)", "", old_hint).rstrip("!")
             escaped_hint = clean_hint.replace('\\"', '"').replace('"', '\\"')
-            new_frontmatter.append(f'{indent}argument-hint: "{escaped_hint} (v{version})!"\n')
+            new_frontmatter.append(f'{indent}argument-hint: "{escaped_hint} (v{version})"\n')
         else:
             new_frontmatter.append(line)
 
