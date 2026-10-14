@@ -42,7 +42,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Hooks
 
-Four hooks in `hooks.json` use the same base format as [workspace hooks](https://code.visualstudio.com/docs/agent-customization/hooks#_hook-configuration-format). All fire automatically for any active agent while the plugin is enabled.
+Four hooks in `com.github.copilot/hooks/hooks.json` use the same base format as [workspace hooks](https://code.visualstudio.com/docs/agent-customization/hooks#_hook-configuration-format). All fire automatically for any active agent while the plugin is enabled.
 
 | Hook | Event | Blocks | Allows |
 |------|-------|--------|--------|
