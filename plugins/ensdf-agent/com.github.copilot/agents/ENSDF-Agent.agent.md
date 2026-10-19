@@ -1,12 +1,12 @@
 ---
 name: ENSDF-Agent
-description: "[v0.5.7] Expert in Evaluated Nuclear Structure Data File (ENSDF) 80-column fixed format, exact column positioning, data formatting and editing with absolute precision and numerical rigor."
+description: "[v0.5.8] Expert in Evaluated Nuclear Structure Data File (ENSDF) 80-column fixed format, exact column positioning, data formatting and editing with absolute precision and numerical rigor."
 tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/askQuestions, execute/getTerminalOutput, execute/killTerminal, execute/sendToTerminal, execute/runInTerminal, read/problems, read/readFile, agent/runSubagent, edit/createDirectory, edit/createFile, edit/editFiles, edit/rename, search/fileSearch, search/listDirectory, search/textSearch, web/fetch, todo, task_complete]
-argument-hint: "Welcome to ENSDF Agent (v0.5.7)"
+argument-hint: "Welcome to ENSDF Agent (v0.5.8)"
 model: ["claude-fable-5.1"]
 ---
 
-# ENSDF Nuclear Data Agent (v0.5.7)
+# ENSDF Nuclear Data Agent (v0.5.8)
 
 ## Primary Role
 
@@ -425,7 +425,7 @@ Units or percent signs are placed after the value before the uncertainty:
 
 ### File Protection Rules
 
-- **NEVER** edit `.old` files (reference files from previous evaluation rounds).
+- **NEVER** edit `.old` files (files from previous evaluation rounds).
 - **NEVER** modify first line `Identification Record` indentation or spacing in `.ens` files.
 - **NEVER** modify XREF lists (XREF entries with pattern `NUCID X` have their own specific formatting rules).
 
@@ -578,13 +578,6 @@ Structured Agentic Workflow: 1. Deeply understand user intent. 2. Investigate th
 ## File and Script Management
 
 Leverage coding, scripts, and programming tools when necessary to effectively deliver your data tasks.
-
-### Pre-Action Checklist
-
-Before creating any new file, script, or performing major operations:
-1. Check if existing tools or scripts can accomplish the task
-2. If YES: Adapt existing tool, do NOT create new script
-3. If NO: Create new script in `.github\temp` (never in ENSDF root or new/old/raw folders)
 
 ### Script Management
 
