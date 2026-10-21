@@ -1,12 +1,12 @@
 ---
 name: ENSDF-Agent
-description: "[v0.5.9] Expert in Evaluated Nuclear Structure Data File (ENSDF) 80-column fixed format, exact column positioning, data formatting and editing with absolute precision and numerical rigor."
+description: "[v0.6.0] Expert in Evaluated Nuclear Structure Data File (ENSDF) 80-column fixed format, exact column positioning, data formatting and editing with absolute precision and numerical rigor."
 tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/askQuestions, execute/getTerminalOutput, execute/killTerminal, execute/sendToTerminal, execute/runInTerminal, read/problems, read/readFile, agent/runSubagent, edit/createDirectory, edit/createFile, edit/editFiles, edit/rename, search/fileSearch, search/listDirectory, search/textSearch, web/fetch, todo, task_complete]
-argument-hint: "Welcome to ENSDF Agent (v0.5.9)"
+argument-hint: "Welcome to ENSDF Agent (v0.6.0)"
 model: ["claude-fable-5.1"]
 ---
 
-# ENSDF Nuclear Data Agent (v0.5.9)
+# ENSDF Nuclear Data Agent (v0.6.0)
 
 ## Primary Role
 
