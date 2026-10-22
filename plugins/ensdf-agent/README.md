@@ -6,6 +6,18 @@ Supported by the U.S. Department of Energy, Office of Science, Office of Nuclear
 
 Open-source release: [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/ENSDF-Agent)
 
+## Installation
+
+1. Open the VS Code Command Palette (`kb(workbench.action.showCommands)`):
+   - Windows/Linux: `Ctrl + Shift + P`
+   - macOS: `Cmd + Shift + P`
+2. Type `Chat: Open Customizations` in the box.
+3. Click the big **+** (plus sign) on the right of **User** to **Install Plugin from Source**.
+4. Type `FRIBND/ENSDF-Agent` in the box.
+5. Press `Enter`.
+
+Done.
+
 ## Overview
 
 The first AI Agent designed for Evaluated Nuclear Structure Data File (ENSDF) workflows.
@@ -32,13 +44,8 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
 - Windows users: Python must be invokable as `python` from terminal.
 
-## Installation
 
-1. Configure plugin marketplaces by clicking "Add Item" and entering `FRIBND/ENSDF-Agent` in the `setting(chat.plugins.marketplaces)` setting.
-2. Open the Extensions view (`kb(workbench.view.extensions)`) and enter `@agentPlugins ENSDF-Agent` in the search field.
-   - Alternatively, select the **More Actions** (three dots) icon in the Extensions sidebar and choose **Views** > **Agent Plugins**.
-3. Click **Install** to install the **ENSDF-Agent** Plugin to your user profile.
-4. Troubleshooting: https://code.visualstudio.com/docs/agent-customization/agent-plugins#_troubleshooting
+Troubleshooting: https://code.visualstudio.com/docs/agent-customization/agent-plugins#_troubleshooting
 
 ## Hooks
 
@@ -55,7 +62,7 @@ Four hooks in `com.github.copilot/hooks/hooks.json` use the same base format as 
 ## Caveats
 - VS Code may not allow you to enable **ENSDF-Agent** from the Agents menu. If you encounter this issue, restart VS Code and select **ENSDF-Agent** again.
 - VS Code does not support installing Agent Plugins in a specific workspace.
-- VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `agents/ENSDF-Agent.agent.md` instead.
+- VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `com.github.copilot/agents/ENSDF-Agent.agent.md` instead.
 - Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
 
 - VS Code extension-contributed agents and skills will negatively impact the user experience of **ENSDF-Agent**. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the chat menu. Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable: Click the Gear icon (Manage) directly on the extension list item. Select Disable (Workspace) from the dropdown menu.
