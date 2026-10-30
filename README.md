@@ -1,6 +1,6 @@
 # ENSDF-Agent
 
-Part of the AI/ML Technical Innovation at the Nuclear Data Group at the Facility for Rare Isotope Beams (nucleardata@frib.msu.edu).
+Part of the Agent/ML Technical Development at the Nuclear Data Group at the Facility for Rare Isotope Beams (nucleardata@frib.msu.edu).
 
 Supported by the U.S. Department of Energy, Office of Science, Office of Nuclear Physics under Award Number DE-SC0016948.
 
@@ -20,13 +20,14 @@ Done.
 
 ## Overview
 
-The first AI Agent designed for Evaluated Nuclear Structure Data File (ENSDF) workflows.
+The first Agent designed for Evaluated Nuclear Structure Data File (ENSDF) workflows.
 Developed and refined through daily evaluation tasks at FRIB Nuclear Data Group.
 
 Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copilot, **ENSDF-Agent** employs Harness Engineering and Semantic Structuring to orchestrate an evaluator-in-the-loop agentic workflow.
 
 ## Development Timeline
 
+- 2026-10-21: **ENSDF-Agent** was demonstrated at 26th Technical Meeting of the International Network of Nuclear Structure and Decay Data Evaluators (NSDD) at MSU.
 - 2026-09-17: Guard-edit Hook was introduced to resolve AI-human concurrent editing conflicts.
 - 2026-08-13: **ENSDF-Agent** Harness was introduced at the 2026 Low Energy Community Meeting at ANL.
 - 2026-08-11: Migrated **ENSDF-Agent** Plugin to [Agent Plugins 1.0](https://agent-plugins.org/) open standard format.
