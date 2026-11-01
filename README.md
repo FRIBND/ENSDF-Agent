@@ -8,15 +8,15 @@ Open-source release: [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/E
 
 ## Installation
 
+Install from the Git repository:
+
 1. Open the VS Code Command Palette (`kb(workbench.action.showCommands)`):
    - Windows/Linux: `Ctrl + Shift + P`
    - macOS: `Cmd + Shift + P`
-2. Type `Chat: Open Customizations` in the box.
-3. Click the big **+** (plus sign) on the right of **User** to **Install Plugin from Source**.
-4. Type `FRIBND/ENSDF-Agent` in the box.
-5. Press `Enter`.
+2. Run **Chat: Install Plugin from Source**.
+3. Enter `https://github.com/FRIBND/ENSDF-Agent` and press Enter.
 
-Done.
+Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace).
 
 ## Overview
 
@@ -46,7 +46,9 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 - Windows users: Python must be invokable as `python` from terminal.
 
 
-Troubleshooting: https://code.visualstudio.com/docs/agent-customization/agent-plugins#_troubleshooting
+## Troubleshooting
+
+See [VS Code's plugin troubleshooting guide](https://code.visualstudio.com/docs/agent-customization/agent-plugins#_troubleshooting).
 
 ## Hooks
 
@@ -61,8 +63,7 @@ Four hooks in `com.github.copilot/hooks/hooks.json` use the same base format as 
 
 
 ## Caveats
-- VS Code may not allow you to enable **ENSDF-Agent** from the Agents menu. If you encounter this issue, restart VS Code and select **ENSDF-Agent** again.
-- VS Code does not support installing Agent Plugins in a specific workspace.
+- VS Code supports profile-wide (**User**) and workspace-scoped (**Workspace**) plugin installation. If **ENSDF-Agent** does not appear, confirm plugins are enabled and the plugin is enabled for the intended harness and scope; then start a fresh chat.
 - VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `com.github.copilot/agents/ENSDF-Agent.agent.md` instead.
 - Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
 
