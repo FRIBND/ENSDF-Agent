@@ -27,6 +27,10 @@ Developed and refined through daily evaluation tasks at FRIB Nuclear Data Group.
 
 Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copilot, **ENSDF-Agent** employs Harness Engineering and Semantic Structuring to orchestrate an evaluator-in-the-loop agentic workflow.
 
+## Plugin Package
+
+The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, portable skills live under `skills/`, and VS Code-specific agents, commands, and hooks live under `com.github.copilot/`. The 14 low-frequency workflows sourced from `.github/prompts/` remain explicit slash commands rather than being added to the skill catalog.
+
 ## Development Timeline
 
 - 2026-10-21: **ENSDF-Agent** was demonstrated at 26th Technical Meeting of the International Network of Nuclear Structure and Decay Data Evaluators (NSDD) at MSU.
@@ -46,6 +50,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
 - Windows users: Python must be invokable as `python` from terminal.
+- Use the plugin from an ENSDF workspace: several workflows expect workspace files under `.github/agents/`, `.github/copilot-instructions.md`, `.github/scripts/`, and `.github/skills/`. Installing the plugin does not add those files to another workspace.
 
 
 ## Troubleshooting
@@ -54,7 +59,7 @@ See [VS Code's plugin troubleshooting guide](https://code.visualstudio.com/docs/
 
 ## Hooks
 
-The plugin-wide `block-root-file-creation` hook runs for any active agent. The other hooks are scoped to **ENSDF-Agent** in its agent frontmatter. They use the [Copilot hook format](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference#_hook-configuration-format).
+The plugin-wide `block-root-file-creation` hook runs for any active agent. The other hooks are scoped to **ENSDF-Agent** in its agent frontmatter. They use the [VS Code hook format](https://code.visualstudio.com/docs/agent-customization/hooks).
 
 | Scope | Hook | Event | Behavior |
 |-------|------|-------|----------|

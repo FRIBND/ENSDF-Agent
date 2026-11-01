@@ -8,15 +8,17 @@ Open-source release: [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/E
 
 ## Installation
 
+Install from the Git repository:
+
 1. Open the VS Code Command Palette (`kb(workbench.action.showCommands)`):
    - Windows/Linux: `Ctrl + Shift + P`
    - macOS: `Cmd + Shift + P`
-2. Type `Chat: Open Customizations` in the box.
-3. Click the big **+** (plus sign) on the right of **User** to **Install Plugin from Source**.
-4. Type `FRIBND/ENSDF-Agent` in the box.
-5. Press `Enter`.
+2. Run **Chat: Install Plugin from Source**.
+3. Enter `FRIBND/ENSDF-Agent` and press Enter.
 
-Done.
+It jumps to Extensions: Agent Plugins panel for no reason, but the installation is done.
+
+Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace).
 
 ## Overview
 
@@ -24,6 +26,10 @@ The first Agent designed for Evaluated Nuclear Structure Data File (ENSDF) workf
 Developed and refined through daily evaluation tasks at FRIB Nuclear Data Group.
 
 Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copilot, **ENSDF-Agent** employs Harness Engineering and Semantic Structuring to orchestrate an evaluator-in-the-loop agentic workflow.
+
+## Plugin Package
+
+The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, portable skills live under `skills/`, and VS Code-specific agents, commands, and hooks live under `com.github.copilot/`. The 14 low-frequency workflows sourced from `.github/prompts/` remain explicit slash commands rather than being added to the skill catalog.
 
 ## Development Timeline
 
@@ -44,25 +50,27 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
 - Windows users: Python must be invokable as `python` from terminal.
+- Use the plugin from an ENSDF workspace: several workflows expect workspace files under `.github/agents/`, `.github/copilot-instructions.md`, `.github/scripts/`, and `.github/skills/`. Installing the plugin does not add those files to another workspace.
 
 
-Troubleshooting: https://code.visualstudio.com/docs/agent-customization/agent-plugins#_troubleshooting
+## Troubleshooting
+
+See [VS Code's plugin troubleshooting guide](https://code.visualstudio.com/docs/agent-customization/agent-plugins#_troubleshooting).
 
 ## Hooks
 
-Four hooks in `com.github.copilot/hooks/hooks.json` use the same base format as [workspace hooks](https://code.visualstudio.com/docs/agent-customization/hooks#_hook-configuration-format). All fire automatically for any active agent while the plugin is enabled.
+The plugin-wide `block-root-file-creation` hook runs for any active agent. The other hooks are scoped to **ENSDF-Agent** in its agent frontmatter. They use the [VS Code hook format](https://code.visualstudio.com/docs/agent-customization/hooks).
 
-| Hook | Event | Blocks | Allows |
-|------|-------|--------|--------|
-| `block-root-file-creation` | PreToolUse | File/directory creation, patch add-file, or terminal writes at workspace root, `A<N>/`, or `XUNDL/` | `.github/temp/`; non-write tools |
-| `block-git-revert` | PreToolUse | `git restore`/`git checkout` on `.ens` or non-temp paths; bare `checkout` | temp-scoped restore/checkout; `git switch`; unrelated commands |
-| `guard_ens_edit` | PreToolUse | Stale `.ens` edits, repeated/mismatched anchors, edits over 8 lines, `.ens` `apply_patch` | Fresh unique anchored edits of 8 lines or fewer; reads |
-| `verify_ens_edit` | PostToolUse | Non-ASCII `.ens` content; data-record 80-column ruler failures | Comment-only edits; non-`.ens` files |
+| Scope | Hook | Event | Behavior |
+|-------|------|-------|----------|
+| Plugin | `block-root-file-creation` | `preToolUse` | Denies protected root, `A<N>/`, and `XUNDL/` file creation; allows `.github/temp/` and non-write tools |
+| ENSDF-Agent | `block-git-revert` | `preToolUse` | Denies unsafe `git restore`/`git checkout`; allows safe temp-scoped operations and `git switch` |
+| ENSDF-Agent | `guard_ens_edit` | `preToolUse` | Denies stale or unanchored `.ens` edits, repeated/mismatched anchors, edits over 8 lines, and `.ens` `apply_patch` |
+| ENSDF-Agent | `verify_ens_edit` | `postToolUse` | Reports non-ASCII and 80-column violations as agent context; post-tool checks cannot undo an edit that already ran |
 
 
 ## Caveats
-- VS Code may not allow you to enable **ENSDF-Agent** from the Agents menu. If you encounter this issue, restart VS Code and select **ENSDF-Agent** again.
-- VS Code does not support installing Agent Plugins in a specific workspace.
+- VS Code supports profile-wide (**User**) and workspace-scoped (**Workspace**) plugin installation. If **ENSDF-Agent** does not appear, confirm plugins are enabled and the plugin is enabled for the intended harness and scope; then start a fresh chat.
 - VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `com.github.copilot/agents/ENSDF-Agent.agent.md` instead.
 - Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
 

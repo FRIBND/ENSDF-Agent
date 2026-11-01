@@ -1,12 +1,27 @@
 ---
 name: ENSDF-Agent
-description: "[v0.6.2] Expert in Evaluated Nuclear Structure Data File (ENSDF) 80-column fixed format, exact column positioning, data formatting and editing with absolute precision and numerical rigor."
-tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/askQuestions, execute/getTerminalOutput, execute/killTerminal, execute/sendToTerminal, execute/runInTerminal, read/problems, read/readFile, agent/runSubagent, edit/createDirectory, edit/createFile, edit/editFiles, edit/rename, search/fileSearch, search/listDirectory, search/textSearch, web/fetch, todo, task_complete]
-argument-hint: "Welcome to ENSDF Agent (v0.6.2)"
+description: "[v0.6.3] Expert in Evaluated Nuclear Structure Data File (ENSDF) 80-column fixed format, exact column positioning, data formatting and editing with absolute precision and numerical rigor."
+tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/askQuestions, execute/getTerminalOutput, execute/killTerminal, execute/sendToTerminal, execute/runInTerminal, read/problems, read/readFile, agent, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, ms-python.python/configurePythonEnvironment, edit/createDirectory, edit/createFile, edit/editFiles, edit/rename, search/fileSearch, search/listDirectory, search/textSearch, web/fetch, vscodeTasks/problems, vscodeGeneral/rename, todo]
+argument-hint: "Welcome to ENSDF Agent (v0.6.3)"
 model: ["claude-fable-5.1"]
+hooks:
+  preToolUse:
+    - type: command
+      command: "python \"${PLUGIN_ROOT}/hooks/scripts/block-git-revert.py\""
+      windows: "powershell -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/hooks/scripts/block-git-revert.ps1\""
+      timeoutSec: 10
+    - type: command
+      command: "python \"${PLUGIN_ROOT}/hooks/scripts/guard_ens_edit.py\""
+      windows: "python \"${PLUGIN_ROOT}/hooks/scripts/guard_ens_edit.py\""
+      timeoutSec: 20
+  postToolUse:
+    - type: command
+      command: "python \"${PLUGIN_ROOT}/hooks/scripts/verify_ens_edit.py\""
+      windows: "python \"${PLUGIN_ROOT}/hooks/scripts/verify_ens_edit.py\""
+      timeoutSec: 30
 ---
 
-# ENSDF Nuclear Data Agent (v0.6.2)
+# ENSDF Nuclear Data Agent (v0.6.3)
 
 ## Primary Role
 

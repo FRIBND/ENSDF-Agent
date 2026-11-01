@@ -1,5 +1,5 @@
 ---
-name: resonance-strength-scaling
+name: res-scaling-workflow
 description: >
   Use this skill to scale relative intensity comments in ENSDF datasets by
   normalizing the strongest line to 100, then append the scaled RI values with

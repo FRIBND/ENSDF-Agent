@@ -10,8 +10,8 @@ Run order, see main():
                                                      agent-scoped hooks and inject canonical version.
     4. sync_plugin_hooks() - generate the single hook config in
                                                      com.github.copilot/hooks/ from source definitions.
-    5. sync()              - mirror prompts/, scripts, and skills: copy changes,
-                                                     remove stale files, skip unchanged/excluded files.
+    5. sync()              - package prompts/ as Copilot commands and mirror
+                                                     scripts/ and skills/ into supported paths.
 
 plugin.json is plugin-owned. Agent and hook outputs are generated in the Agent
 Plugins 1.0 Copilot namespace; legacy root copies are removed.
@@ -28,9 +28,14 @@ import sys
 from pathlib import Path
 
 
-# Source .github/ entries copied 1:1 by sync().
+# Managed source entries. Prompt-folder SKILL.md files are packaged as Copilot commands.
 managed_entries = (
     "prompts",
+    "scripts",
+    "skills",
+)
+managed_plugin_entries = (
+    "com.github.copilot/commands",
     "scripts",
     "skills",
 )
@@ -109,7 +114,13 @@ def normalize_relative_path(path: Path | str) -> Path:
 
 def plugin_relative_path(path: Path) -> Path:
     if path.parts and path.parts[0] == "prompts":
-        return Path("skills", *path.parts[1:])
+        if len(path.parts) == 3 and path.name == "SKILL.md":
+            return Path(
+                "com.github.copilot",
+                "commands",
+                f"{path.parts[1]}.prompt.md",
+            )
+        return Path("com.github.copilot", "commands", *path.parts[1:])
     return path
 
 
@@ -150,7 +161,7 @@ def iter_managed_source_files(source_root: Path) -> list[Path]:
 
 def iter_managed_target_files(plugin_root: Path) -> list[Path]:
     files: list[Path] = []
-    for entry in managed_entries:
+    for entry in managed_plugin_entries:
         full_path = plugin_root / entry
         if not full_path.exists():
             continue
@@ -171,13 +182,13 @@ def iter_managed_target_files(plugin_root: Path) -> list[Path]:
     return sorted(set(files))
 
 
-def plugin_skill_content(source_path: Path, source_relative: Path) -> str:
+def plugin_prompt_content(source_path: Path, source_relative: Path) -> str:
     text = source_path.read_text(encoding="utf-8")
     if source_relative.parts and source_relative.parts[0] == "prompts":
-        skill_directory = source_relative.parts[1]
+        command_name = source_relative.parts[1]
         text = re.sub(
             r"(?m)^name:\s*.*$",
-            f"name: {skill_directory}",
+            f"name: {command_name}",
             text,
             count=1,
         )
@@ -633,10 +644,12 @@ def sync_agent_file(
 
 
 def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
-    """Mirror-copy managed prompts, scripts, and skills into the plugin.
+    """Package prompt-folder workflows as commands, plus scripts and skills.
 
     Copies new or changed files, removes stale managed files, and skips
-    unchanged files plus excluded directories.
+    unchanged files plus excluded directories. Rare workflows stored in the
+    source prompts/ directory remain explicitly invoked Copilot commands;
+    portable skills remain under the plugin root's skills/ directory.
     """
     if not source_root.is_dir():
         raise FileNotFoundError(f"Source .github path not found: {source_root}")
@@ -667,7 +680,7 @@ def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
         copy_needed = True
         if target_path.is_file():
             if relative.parts and relative.parts[0] == "prompts":
-                copy_needed = plugin_skill_content(source_path, relative) != target_path.read_text(encoding="utf-8")
+                copy_needed = plugin_prompt_content(source_path, relative) != target_path.read_text(encoding="utf-8")
             else:
                 copy_needed = sha256sum(source_path) != sha256sum(target_path)
 
@@ -681,7 +694,7 @@ def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
         else:
             if relative.parts and relative.parts[0] == "prompts":
                 target_path.write_text(
-                    plugin_skill_content(source_path, relative),
+                    plugin_prompt_content(source_path, relative),
                     encoding="utf-8",
                 )
             else:
