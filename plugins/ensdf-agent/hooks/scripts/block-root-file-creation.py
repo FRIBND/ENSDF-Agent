@@ -38,9 +38,15 @@ DIRECTORY_TOOL_NAMES = {
     "functions.create_directory",
     "vscode.createDirectory",
 }
-PATCH_TOOL_NAMES = {"apply_patch", "edit/applyPatch", "functions.apply_patch"}
+PATCH_TOOL_NAMES = {
+    "apply_patch",
+    "applyPatch",
+    "edit/applyPatch",
+    "functions.apply_patch",
+}
 TERMINAL_TOOL_NAMES = {
     "run_in_terminal",
+    "runInTerminal",
     "execute/runInTerminal",
     "functions.run_in_terminal",
 }
@@ -91,14 +97,22 @@ def load_input():
 
 
 def emit_denial(reason):
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
-    print(json.dumps(output))
+    print(json.dumps({
+        "permissionDecision": "deny",
+        "permissionDecisionReason": reason,
+    }))
+
+
+def normalize_hook_input(payload):
+    normalized = dict(payload)
+    normalized["tool_name"] = payload.get("toolName") or payload.get("tool_name", "")
+    normalized["tool_input"] = (
+        payload.get("toolArgs")
+        or payload.get("tool_args")
+        or payload.get("tool_input")
+        or {}
+    )
+    return normalized
 
 
 def default_workspace_root(hook_input):
@@ -276,6 +290,7 @@ def main():
     if not hook_input:
         sys.exit(0)
 
+    hook_input = normalize_hook_input(hook_input)
     target_paths = extract_target_paths(hook_input)
     if not target_paths:
         sys.exit(0)

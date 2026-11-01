@@ -7,14 +7,21 @@ import sys
 import difflib
 
 MUTATING_RE = re.compile(r"--fix\b|>>?\s|Set-Content|Out-File|Add-Content|\.write_text\(|WriteAllText", re.IGNORECASE)
-EDIT_TOOLS = {"replace_string_in_file", "multi_replace_string_in_file", "editFiles", "edit/editFiles"}
+EDIT_TOOLS = {
+    "replace_string_in_file",
+    "multi_replace_string_in_file",
+    "editFiles",
+    "edit/editFiles",
+}
+CREATE_TOOLS = {"create_file", "createFile", "edit/createFile"}
+PATCH_TOOLS = {"apply_patch", "applyPatch", "edit/applyPatch", "functions.apply_patch"}
 
 # ENSDF-Agent Hook: Validate .ens files after edits
 # --------------------------------------------------------
 # PostToolUse event — runs two validation passes on any .ens file that was
 # just created or edited by ENSDF-Agent:
 #
-#   PASS 1 (always): ASCII-only check — blocks if any non-ASCII character
+#   PASS 1 (always): ASCII-only check — reports any non-ASCII character
 #     found in the .ens file. Applies to ALL edits (data records AND comments).
 #
 #   PASS 2 (always when guard supplied an expectation): actual content must match
@@ -32,11 +39,11 @@ EDIT_TOOLS = {"replace_string_in_file", "multi_replace_string_in_file", "editFil
 #   - Handles all VS Code file-editing tool input shapes
 #   - Validates ALL .ens files touched by a single tool call (multi-file)
 #   - Uses hook-provided cwd for robust script path resolution
-#   - Returns Sacred Workflow guidance on failure
+#   - Adds Sacred Workflow guidance to agent context on failure
 #
 # Hook event : PostToolUse
-# On failure : decision "block" + fix instructions in reason
-# On success : exit 0  (silent)
+# On failure : additionalContext with fix instructions (the edit has already run)
+# On success : exit 0 with no additional context
 
 
 PATCH_HEADER_PREFIXES = (
@@ -56,6 +63,18 @@ def emit(payload):
         sys.stdout.buffer.flush()
     except AttributeError:
         sys.stdout.write(json.dumps(payload))
+
+
+def normalize_hook_payload(payload):
+    normalized = dict(payload)
+    normalized["tool_name"] = payload.get("toolName") or payload.get("tool_name", "")
+    normalized["tool_input"] = (
+        payload.get("toolArgs")
+        or payload.get("tool_args")
+        or payload.get("tool_input")
+        or {}
+    )
+    return normalized
 
 
 def load_input():
@@ -380,14 +399,14 @@ def is_mutating_call(payload):
     "changed since your last read/edit (concurrent edit)" denials.
     """
     tool = payload.get("tool_name", "")
-    if tool in EDIT_TOOLS or tool in ("apply_patch", "create_file"):
+    if tool in EDIT_TOOLS or tool in PATCH_TOOLS or tool in CREATE_TOOLS:
         return True
     command = (payload.get("tool_input") or {}).get("command")
     return isinstance(command, str) and "--dry-run" not in command and bool(MUTATING_RE.search(command))
 
 
 def main():
-    payload = load_input()
+    payload = normalize_hook_payload(load_input())
     tool = payload.get("tool_name", "")
 
     # Read-only calls: nothing to validate; the guard token must survive.
@@ -405,19 +424,13 @@ def main():
     mismatches = pop_expected_hashes(ens_paths, cwd) if is_mutating_call(payload) else []
     if mismatches:
         files = "\n".join(f"  {path}" for path, _, _ in mismatches)
-        emit({
-            "decision": "block",
-            "reason": (
+        emit({"additionalContext": (
                 "ENSDF post-edit content differs from the PreToolUse prediction. "
                 "The edit may have collapsed, expanded, or otherwise rewritten an unintended block.\n"
                 f"Affected file(s):\n{files}\n"
-                "Re-read the affected block, inspect the diff, and rebuild a smaller exact edit."
-            ),
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": "Predicted post-edit hash did not match actual file content.",
-            },
-        })
+                "The tool action already completed; re-read the affected block, inspect the diff, "
+                "and rebuild a smaller exact edit."
+            )})
         return
 
     # ===== PASS 1: ASCII-only validation (ALWAYS — data records AND comments) =====
@@ -433,17 +446,11 @@ def main():
 
     if ascii_errors:
         error_text = "\n\n".join(ascii_errors)
-        emit({
-            "decision": "block",
-            "reason": (
+        emit({"additionalContext": (
                 "ENSDF ASCII-only violation. .ens files must use standard ASCII.\n\n"
+                "The tool action already completed; correct the file before continuing.\n\n"
                 f"{error_text}"
-            ),
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": f"ASCII validation FAILED:\n{error_text}",
-            },
-        })
+            )})
         return
 
     # ===== PASS 2: 80-column ruler validation (DATA RECORDS ONLY) =====
@@ -469,9 +476,7 @@ def main():
         return
 
     error_text = "\n\n".join(all_errors)
-    emit({
-        "decision": "block",
-        "reason": (
+    emit({"additionalContext": (
             "ENSDF 80-column validation failed. Fix the data-record edit before continuing.\n\n"
             "Sacred Workflow (ENSDF-Agent.agent.md — MANDATORY):\n"
             "  EDIT -> VALIDATE -> CONFIRM -> REPEAT\n\n"
@@ -481,13 +486,9 @@ def main():
             '  3. Re-run: python .github/scripts/ensdf_1line_ruler.py --line "<fixed line>"\n'
             "  4. Confirm exit code 0 before proceeding to the next edit.\n\n"
             "Do NOT make multiple edits before validating each one.\n\n"
+            "The tool action already completed; fix and validate the file now.\n\n"
             f"Validation errors:\n{error_text}"
-        ),
-        "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": f"ensdf_1line_ruler.py FAILED:\n{error_text}",
-        },
-    })
+        )})
 
 
 if __name__ == "__main__":

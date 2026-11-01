@@ -14,7 +14,9 @@ Install from the Git repository:
    - Windows/Linux: `Ctrl + Shift + P`
    - macOS: `Cmd + Shift + P`
 2. Run **Chat: Install Plugin from Source**.
-3. Enter `https://github.com/FRIBND/ENSDF-Agent` and press Enter.
+3. Enter `FRIBND/ENSDF-Agent` and press Enter.
+
+It jumps to Extensions: Agent Plugins panel for no reason, but the installation is done.
 
 Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace).
 
@@ -52,14 +54,14 @@ See [VS Code's plugin troubleshooting guide](https://code.visualstudio.com/docs/
 
 ## Hooks
 
-Four hooks in `com.github.copilot/hooks/hooks.json` use the same base format as [workspace hooks](https://code.visualstudio.com/docs/agent-customization/hooks#_hook-configuration-format). All fire automatically for any active agent while the plugin is enabled.
+The plugin-wide `block-root-file-creation` hook runs for any active agent. The other hooks are scoped to **ENSDF-Agent** in its agent frontmatter. They use the [Copilot hook format](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference#_hook-configuration-format).
 
-| Hook | Event | Blocks | Allows |
-|------|-------|--------|--------|
-| `block-root-file-creation` | PreToolUse | File/directory creation, patch add-file, or terminal writes at workspace root, `A<N>/`, or `XUNDL/` | `.github/temp/`; non-write tools |
-| `block-git-revert` | PreToolUse | `git restore`/`git checkout` on `.ens` or non-temp paths; bare `checkout` | temp-scoped restore/checkout; `git switch`; unrelated commands |
-| `guard_ens_edit` | PreToolUse | Stale `.ens` edits, repeated/mismatched anchors, edits over 8 lines, `.ens` `apply_patch` | Fresh unique anchored edits of 8 lines or fewer; reads |
-| `verify_ens_edit` | PostToolUse | Non-ASCII `.ens` content; data-record 80-column ruler failures | Comment-only edits; non-`.ens` files |
+| Scope | Hook | Event | Behavior |
+|-------|------|-------|----------|
+| Plugin | `block-root-file-creation` | `preToolUse` | Denies protected root, `A<N>/`, and `XUNDL/` file creation; allows `.github/temp/` and non-write tools |
+| ENSDF-Agent | `block-git-revert` | `preToolUse` | Denies unsafe `git restore`/`git checkout`; allows safe temp-scoped operations and `git switch` |
+| ENSDF-Agent | `guard_ens_edit` | `preToolUse` | Denies stale or unanchored `.ens` edits, repeated/mismatched anchors, edits over 8 lines, and `.ens` `apply_patch` |
+| ENSDF-Agent | `verify_ens_edit` | `postToolUse` | Reports non-ASCII and 80-column violations as agent context; post-tool checks cannot undo an edit that already ran |
 
 
 ## Caveats

@@ -299,14 +299,8 @@ def build_denial_output(blocked_info, cmd):
     ])
 
     return {
-        'continue': False,
-        'stopReason': reason,
-        'systemMessage': reason,
-        'hookSpecificOutput': {
-            'hookEventName': 'PreToolUse',
-            'permissionDecision': 'deny',
-            'permissionDecisionReason': reason,
-        },
+        'permissionDecision': 'deny',
+        'permissionDecisionReason': reason,
     }
 
 
@@ -316,7 +310,7 @@ def main():
         sys.exit(0)
 
     # Only act on terminal execution tools
-    tool_name = hook_input.get('tool_name', '')
+    tool_name = hook_input.get('toolName') or hook_input.get('tool_name', '')
     is_terminal_tool = tool_name in (
         'execute/runInTerminal',
         'runInTerminal',
@@ -326,7 +320,12 @@ def main():
         sys.exit(0)
 
     # Extract the command string
-    tool_input = hook_input.get('tool_input') or {}
+    tool_input = (
+        hook_input.get('toolArgs')
+        or hook_input.get('tool_args')
+        or hook_input.get('tool_input')
+        or {}
+    )
     command = tool_input.get('command', '')
     if not command:
         sys.exit(0)

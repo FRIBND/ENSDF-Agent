@@ -59,12 +59,22 @@ ENS_PATH_RE = re.compile(r"[^\s\"']+\.ens", re.IGNORECASE)
 MUTATING_RE = re.compile(r"--fix\b|>>?\s|Set-Content|Out-File|Add-Content|\.write_text\(|WriteAllText", re.IGNORECASE)
 EDIT_TOOLS = {"replace_string_in_file", "multi_replace_string_in_file", "editFiles", "edit/editFiles"}
 READ_TOOLS = {"read_file", "readFile", "read/readFile"}
+PATCH_TOOLS = {"apply_patch", "applyPatch", "edit/applyPatch", "functions.apply_patch"}
+TERMINAL_TOOLS = {
+    "run_in_terminal",
+    "runInTerminal",
+    "execute/runInTerminal",
+    "send_to_terminal",
+    "sendToTerminal",
+    "execute/sendToTerminal",
+}
 
 
 def deny(reason):
-    payload = json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                             "permissionDecision": "deny",
-                                             "permissionDecisionReason": reason}})
+    payload = json.dumps({
+        "permissionDecision": "deny",
+        "permissionDecisionReason": reason,
+    })
     write_stdout(payload)
     sys.exit(0)
 
@@ -361,8 +371,13 @@ def guard_terminal(command, state, root):
 
 def main():
     event = load_event()
-    tool = event.get("tool_name", "")
-    data = event.get("tool_input") or {}
+    tool = event.get("toolName") or event.get("tool_name", "")
+    data = (
+        event.get("toolArgs")
+        or event.get("tool_args")
+        or event.get("tool_input")
+        or {}
+    )
     root = workspace_root(event)
     state_path = os.path.join(root, ".github", "temp", "ens_guard", "state.json")
     state = state_load(state_path)
@@ -376,7 +391,7 @@ def main():
                 state_save(state, state_path)
         return
 
-    if tool == "apply_patch":
+    if tool in PATCH_TOOLS:
         patch_text = data.get("input", "") or ""
         if re.search(r"^\*\*\* (?:Update|Add|Delete) File: .*\.ens", patch_text, re.IGNORECASE | re.MULTILINE):
             operations = comment_patch_operations(patch_text, root)
@@ -384,7 +399,7 @@ def main():
                 state_save(state, state_path)
         return
 
-    if tool in ("run_in_terminal", "send_to_terminal"):
+    if tool in TERMINAL_TOOLS:
         if guard_terminal(data.get("command", "") or "", state, root):
             state_save(state, state_path)
         return
