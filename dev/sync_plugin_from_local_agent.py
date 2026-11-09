@@ -2,16 +2,16 @@
 Regenerates the plugins/ensdf-agent/ payload from the local ENSDF workspace
 (default source: D:/X/ND/ENSDF/.github).
 
+Run from the repository root with: python dev/sync_plugin_from_local_agent.py
+
 Run order, see main():
     1. bump_versions()     - bump manifests and return canonical version.
     2. sync_readme()       - copy repo README if changed.
     3. sync_agent_file()   - generate the single agent in
-                                                     com.github.copilot/agents/ from source; retain
-                                                     agent-scoped hooks and inject canonical version.
-    4. sync_plugin_hooks() - generate the single hook config in
-                                                     com.github.copilot/hooks/ from source definitions.
-    5. sync()              - package prompts/ as Copilot commands and mirror
-                                                     scripts/ and skills/ into supported paths.
+                             com.github.copilot/agents/ from source; retain
+                             agent-scoped hooks and inject canonical version.
+    4. sync()              - package prompts/ as Copilot commands and mirror
+                             scripts/, hooks/scripts/, and skills/ into supported paths.
 
 plugin.json is plugin-owned. Agent and hook outputs are generated in the Agent
 Plugins 1.0 Copilot namespace; legacy root copies are removed.
@@ -33,11 +33,13 @@ managed_entries = (
     "prompts",
     "scripts",
     "skills",
+    "hooks/scripts",
 )
 managed_plugin_entries = (
     "com.github.copilot/commands",
     "scripts",
     "skills",
+    "com.github.copilot/hooks/scripts",
 )
 
 # Any path containing one of these directory names, anywhere in its parts, is
@@ -121,6 +123,8 @@ def plugin_relative_path(path: Path) -> Path:
                 f"{path.parts[1]}.prompt.md",
             )
         return Path("com.github.copilot", "commands", *path.parts[1:])
+    if path.parts[:2] == ("hooks", "scripts"):
+        return Path("com.github.copilot", "hooks", *path.parts[1:])
     return path
 
 
@@ -228,251 +232,211 @@ def sync_readme(repo_root: Path, plugin_root: Path, dry_run: bool) -> None:
         print("COPIED README.md")
 
 
-def parse_frontmatter_scalar(value: str):
-    """Parse the simple scalar values used by hook entries in agent frontmatter."""
-    value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
-        if value[0] == '"':
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                pass
-        return value[1:-1]
-    if re.fullmatch(r"-?\d+", value):
-        return int(value)
-    if value.lower() in ("true", "false"):
-        return value.lower() == "true"
-    return value
-
-
 def rewrite_plugin_hook_path(command: str) -> str:
-    """Make a source hook command valid after plugin installation.
+    """Rewrite bundled script paths in a shell command, preserving its arguments."""
+    source_path = re.compile(
+        r"(?P<quoted>['\"])(?P<quoted_path>(?:\./)?\.github[\\/]+hooks[\\/]+.*?)(?P=quoted)"
+        r"|(?P<bare>(?:\./)?\.github[\\/]+hooks[\\/]+[^\s\"';&|<>]+)"
+    )
 
-    Source commands point into ``.github/hooks`` inside the workspace. Plugin
-    hooks run from an external install directory, so bundled files must use
-    ``${PLUGIN_ROOT}`` and be quoted for paths containing spaces.
-    """
-    command = command.replace("\\", "/")
-    command = command.replace(".github/hooks/", "${PLUGIN_ROOT}/com.github.copilot/hooks/")
-    return re.sub(
-        r'(?<!["\'])\$\{PLUGIN_ROOT\}/com\.github\.copilot/hooks/[^\s"\']+',
-        r'"\g<0>"',
-        command,
+    def replace(match: re.Match[str]) -> str:
+        path = match.group("quoted_path") or match.group("bare")
+        path = path.replace("\\", "/")
+        if path.startswith("./"):
+            path = path[2:]
+        rewritten = "${PLUGIN_ROOT}/com.github.copilot/hooks/" + path[len(".github/hooks/"):]
+        quote = match.group("quoted")
+        return f"{quote}{rewritten}{quote}" if quote else f'"{rewritten}"'
+
+    return source_path.sub(replace, command, count=1)
+
+
+def rewrite_plugin_hook_executable(executable: str) -> str:
+    """Rewrite a direct hook executable path without adding shell quoting."""
+    source_path = re.fullmatch(
+        r"(?:\./)?\.github[\\/]+hooks[\\/]+(.+)",
+        executable,
+    )
+    if not source_path:
+        return executable
+    relative_path = source_path.group(1).replace("\\", "/")
+    return "${PLUGIN_ROOT}/com.github.copilot/hooks/" + relative_path
+
+
+def _decode_hook_string_scalar(value: str) -> tuple[str, str] | None:
+    """Decode a simple YAML string scalar and return its trailing comment/space."""
+    stripped = value.strip()
+    if stripped in {"|", "|-", "|+", ">", ">-", ">+"}:
+        return None
+
+    trailing = value[len(value.rstrip()):]
+    if stripped.startswith('"'):
+        try:
+            decoded, end = json.JSONDecoder().raw_decode(stripped)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"Invalid quoted hook command scalar: {value!r}") from error
+        suffix = stripped[end:]
+        if suffix and not (suffix.lstrip().startswith("#")):
+            raise ValueError(f"Unexpected text after hook command scalar: {suffix!r}")
+        return decoded, suffix + trailing
+
+    if stripped.startswith("'"):
+        end = 1
+        decoded_chars = []
+        while end < len(stripped):
+            char = stripped[end]
+            if char == "'":
+                if end + 1 < len(stripped) and stripped[end + 1] == "'":
+                    decoded_chars.append("'")
+                    end += 2
+                    continue
+                break
+            decoded_chars.append(char)
+            end += 1
+        if end == len(stripped):
+            raise ValueError(f"Unterminated quoted hook command scalar: {value!r}")
+        suffix = stripped[end + 1:]
+        if suffix and not suffix.lstrip().startswith("#"):
+            raise ValueError(f"Unexpected text after hook command scalar: {suffix!r}")
+        return "".join(decoded_chars), suffix + trailing
+
+    comment_at = next(
+        (
+            index
+            for index, char in enumerate(stripped)
+            if char == "#" and (index == 0 or stripped[index - 1].isspace())
+        ),
+        None,
+    )
+    if comment_at is None:
+        return stripped, trailing
+    return stripped[:comment_at].rstrip(), stripped[comment_at:] + trailing
+
+
+def _rewrite_hook_command_line(line: str, field_indent: int) -> tuple[str, bool]:
+    """Rewrite one hook executable field; report whether it starts a block scalar."""
+    match = re.match(
+        r"^(?P<indent>[ \t]*)(?P<key>command|exec|bash|powershell|windows|linux|osx):"
+        r"(?P<spacing>[ \t]*)(?P<value>.*?)(?P<newline>\r?\n)?$",
+        line,
+    )
+    if not match or len(match.group("indent")) != field_indent:
+        return line, False
+
+    key = match.group("key")
+    raw_value = match.group("value")
+    if raw_value.strip() in {"|", "|-", "|+", ">", ">-", ">+"}:
+        return line, True
+
+    if ".github" not in raw_value or "hooks" not in raw_value:
+        return line, False
+    decoded = _decode_hook_string_scalar(raw_value)
+    if decoded is None:
+        return line, True
+    value, suffix = decoded
+    if key == "exec":
+        rewritten = rewrite_plugin_hook_executable(value)
+    else:
+        rewritten = rewrite_plugin_hook_path(value)
+    if rewritten == value:
+        return line, False
+
+    return (
+        f"{match.group('indent')}{key}:{match.group('spacing')}"
+        f"{json.dumps(rewritten)}{suffix}{match.group('newline') or ''}",
+        False,
     )
 
 
-def normalize_hook_event(event: str) -> str:
-    return {
-        "PreToolUse": "preToolUse",
-        "PostToolUse": "postToolUse",
-    }.get(event, event)
-
-
-def rewrite_hook_entry(entry: dict, plugin_wide: bool = False) -> dict:
-    rewritten = {}
-    for key, value in entry.items():
-        if key in {"command", "windows", "linux", "osx", "bash", "powershell"} and isinstance(value, str):
-            output_key = key
-            if plugin_wide and key == "windows":
-                output_key = "powershell"
-            elif plugin_wide and key in {"linux", "osx"}:
-                output_key = "bash"
-            rewritten[output_key] = rewrite_plugin_hook_path(value)
-        elif key == "timeout":
-            rewritten["timeoutSec"] = value
-        else:
-            rewritten[key] = value
-    return rewritten
-
-
-def append_hook_config(target: dict, source: dict, plugin_wide: bool = False) -> None:
-    """Append hook entries while preserving order and removing duplicates."""
-    source_hooks = source.get("hooks", {})
-    if not isinstance(source_hooks, dict):
-        raise ValueError("Hook configuration must contain a hooks object")
-
-    for event, entries in source_hooks.items():
-        if not isinstance(entries, list):
-            raise ValueError(f"Hook event {event!r} must contain a list")
-        event = normalize_hook_event(event)
-        destination = target.setdefault(event, [])
-        existing = {
-            json.dumps(entry, sort_keys=True, separators=(",", ":"))
-            for entry in destination
-        }
-        for entry in entries:
-            if not isinstance(entry, dict):
-                raise ValueError(f"Hook event {event!r} contains a non-object entry")
-            rewritten = rewrite_hook_entry(entry, plugin_wide=plugin_wide)
-            marker = json.dumps(rewritten, sort_keys=True, separators=(",", ":"))
-            if marker in existing:
-                continue
-            destination.append(rewritten)
-            existing.add(marker)
-
-
-def extract_agent_frontmatter(agent_text: str) -> list[str]:
-    lines = agent_text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return []
-    for index in range(1, len(lines)):
-        if lines[index].strip() == "---":
-            return lines[1:index]
-    return []
-
-
-def parse_agent_hook_config(agent_text: str) -> dict:
-    """Read flat command hooks from the agent YAML frontmatter.
-
-    The project hook entries use a small, stable YAML subset. Keeping this
-    parser local avoids adding a PyYAML dependency to a maintenance script.
-    """
-    frontmatter = extract_agent_frontmatter(agent_text)
-    events: dict[str, list[dict]] = {}
-    in_hooks = False
-    current_event = None
-    current_entry = None
-
-    def finish_entry() -> None:
-        nonlocal current_entry
-        if current_event is not None and current_entry is not None:
-            events.setdefault(current_event, []).append(current_entry)
-        current_entry = None
-
-    for line in frontmatter:
-        if not in_hooks:
-            if line.strip() == "hooks:":
-                in_hooks = True
-            continue
-
-        if line and not line[0].isspace():
-            break
-
-        event_match = re.match(r"^  ([A-Za-z][A-Za-z0-9_-]*):\s*$", line)
-        if event_match:
-            finish_entry()
-            current_event = event_match.group(1)
-            continue
-
-        entry_match = re.match(r"^    -\s+type:\s*(.+?)\s*$", line)
-        if entry_match:
-            finish_entry()
-            current_entry = {"type": parse_frontmatter_scalar(entry_match.group(1))}
-            continue
-
-        field_match = re.match(r"^      ([A-Za-z][A-Za-z0-9_-]*):\s*(.*?)\s*$", line)
-        if field_match and current_entry is not None:
-            current_entry[field_match.group(1)] = parse_frontmatter_scalar(field_match.group(2))
-
-    finish_entry()
-    return {"hooks": events}
-
-
-def canonical_agent_hook_config(agent_text: str, plugin_hooks: dict) -> dict:
-    """Keep agent-scoped hooks in the agent and remove plugin-wide duplicates."""
-    plugin_entries = {}
-    for event, entries in plugin_hooks.get("hooks", {}).items():
-        plugin_entries[normalize_hook_event(event)] = {
-            json.dumps(entry, sort_keys=True, separators=(",", ":"))
-            for entry in entries
-        }
-
-    hooks = {}
-    source_hooks = parse_agent_hook_config(agent_text).get("hooks", {})
-    for event, entries in source_hooks.items():
-        event = normalize_hook_event(event)
-        for entry in entries:
-            rewritten = rewrite_hook_entry(entry)
-            marker = json.dumps(
-                rewrite_hook_entry(entry, plugin_wide=True),
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-            if marker in plugin_entries.get(event, set()):
-                continue
-            hooks.setdefault(event, []).append(rewritten)
-    return {"hooks": hooks}
-
-
-def render_agent_hook_block(hooks: dict) -> list[str]:
-    lines = ["hooks:\n"]
-    for event, entries in hooks.get("hooks", {}).items():
-        lines.append(f"  {event}:\n")
-        for entry in entries:
-            lines.append("    - type: command\n")
-            for key, value in entry.items():
-                if key == "type":
-                    continue
-                lines.append(f"      {key}: {json.dumps(value)}\n")
-    return lines
-
-
-def rewrite_agent_hook_block(agent_text: str, plugin_hooks: dict) -> str:
-    """Rewrite plugin paths in agent-scoped hooks and retain their scope."""
+def rewrite_agent_hook_block(agent_text: str) -> str:
+    """Rewrite bundled paths in an agent's hooks without moving or reformatting them."""
     lines = agent_text.splitlines(keepends=True)
     if not lines or lines[0].strip() != "---":
         return agent_text
 
-    end_idx = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
-    if end_idx is None:
-        return agent_text
-
-    start_idx = next(
-        (i for i in range(1, end_idx) if lines[i].rstrip("\r\n") == "hooks:"),
+    frontmatter_end = next(
+        (index for index in range(1, len(lines)) if lines[index].strip() == "---"),
         None,
     )
-    if start_idx is None:
+    if frontmatter_end is None:
         return agent_text
 
-    block_end = start_idx + 1
-    while block_end < end_idx:
-        line = lines[block_end]
-        if line.strip() and not line[0].isspace():
-            break
-        block_end += 1
+    hooks_start = next(
+        (
+            index
+            for index in range(1, frontmatter_end)
+            if re.fullmatch(r"hooks:[ \t]*(?:#.*)?(?:\r?\n)?", lines[index])
+        ),
+        None,
+    )
+    if hooks_start is None:
+        return agent_text
 
-    rendered = render_agent_hook_block(canonical_agent_hook_config(agent_text, plugin_hooks))
-    frontmatter = lines[1:start_idx] + rendered + lines[block_end:end_idx]
-    return "".join([lines[0], *frontmatter, *lines[end_idx:]])
+    hooks_end = next(
+        (
+            index
+            for index in range(hooks_start + 1, frontmatter_end)
+            if lines[index].strip() and not lines[index][0].isspace()
+        ),
+        frontmatter_end,
+    )
+    current_field_indent = None
+    index = hooks_start + 1
+    while index < hooks_end:
+        item_match = re.match(r"^(?P<indent>[ \t]*)-\s+type:", lines[index])
+        if item_match:
+            current_field_indent = len(item_match.group("indent")) + 2
+
+        if current_field_indent is not None:
+            rewritten, is_block = _rewrite_hook_command_line(
+                lines[index],
+                current_field_indent,
+            )
+            lines[index] = rewritten
+            if is_block:
+                block_indent = current_field_indent
+                field_match = re.match(
+                    r"^[ \t]*(?P<key>command|exec):",
+                    lines[index],
+                )
+                field_key = field_match.group("key") if field_match else "command"
+                block_index = index + 1
+                while block_index < hooks_end:
+                    block_line = lines[block_index]
+                    if block_line.strip() and len(block_line) - len(block_line.lstrip()) <= block_indent:
+                        break
+                    newline = "\r\n" if block_line.endswith("\r\n") else "\n" if block_line.endswith("\n") else ""
+                    content = block_line[:len(block_line) - len(block_line.lstrip())]
+                    command = block_line[len(content):].removesuffix(newline)
+                    if field_key == "exec":
+                        rewritten_command = rewrite_plugin_hook_executable(command)
+                    else:
+                        rewritten_command = rewrite_plugin_hook_path(command)
+                    if rewritten_command != command:
+                        lines[block_index] = content + rewritten_command + newline
+                    block_index += 1
+                index = block_index
+                continue
+        index += 1
+
+    return "".join(lines)
 
 
-def build_plugin_hook_config(source_root: Path) -> dict:
-    """Build plugin-wide hooks from workspace hook configuration."""
-    merged: dict[str, list[dict]] = {}
-    workspace_config = source_root / "hooks" / "block-root-file-creation.json"
-    if workspace_config.is_file():
-        with workspace_config.open(encoding="utf-8") as handle:
-            append_hook_config(merged, json.load(handle), plugin_wide=True)
-
-    if not merged:
-        raise FileNotFoundError(f"No source hook definitions found under {source_root}")
-    return {"version": 1, "hooks": merged}
-
-
-def sync_plugin_hooks(source_root: Path, plugin_root: Path, dry_run: bool) -> None:
-    """Generate the single Agent Plugins 1.0 hook file and remove legacy root copy."""
-    target = plugin_root / "com.github.copilot" / "hooks" / "hooks.json"
-    legacy_target = plugin_root / "hooks.json"
-    config = build_plugin_hook_config(source_root)
-    generated = json.dumps(config, indent=2) + "\n"
-
-    rel_label = target.relative_to(plugin_root).as_posix()
-    existing = target.read_text(encoding="utf-8") if target.is_file() else None
-    if existing == generated:
-        print(f"SKIP   {rel_label} (unchanged)")
-    elif dry_run:
-        print(f"COPY   {rel_label} (generated from source hooks)")
-    else:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(generated, encoding="utf-8")
-        print(f"COPIED {rel_label} (generated from source hooks)")
-
-    if legacy_target.is_file():
+def remove_plugin_wide_hook_config(plugin_root: Path, dry_run: bool) -> None:
+    """Remove obsolete hook configuration files so hooks remain agent-scoped."""
+    targets = (
+        plugin_root / "com.github.copilot" / "hooks" / "hooks.json",
+        plugin_root / "hooks.json",
+    )
+    for target in targets:
+        if not target.is_file():
+            continue
+        label = target.relative_to(plugin_root).as_posix()
         if dry_run:
-            print("REMOVE hooks.json (legacy duplicate; Agent Plugins 1.0 uses com.github.copilot/hooks/)")
+            print(f"REMOVE {label} (hooks now live in agent frontmatter)")
         else:
-            legacy_target.unlink()
-            print("REMOVED hooks.json (legacy duplicate)")
+            target.unlink()
+            print(f"REMOVED {label} (hooks now live in agent frontmatter)")
 
 
 def inject_agent_version(agent_text: str, version: str) -> str:
@@ -528,7 +492,6 @@ def build_merged_agent_content(
     agent_text: str,
     instructions_text: str,
     version: str | None = None,
-    plugin_hooks: dict | None = None,
 ) -> str:
     """Build the full plugin agent-file content from current source content.
 
@@ -538,8 +501,8 @@ def build_merged_agent_content(
     sync run. Nothing from a previous plugin copy is reused or preserved.
 
     Three things happen to agent_text before it's used:
-      1. Agent-scoped hooks are retained, normalized, and rewritten to use the
-         plugin root. Hooks duplicated by plugin-wide configuration are omitted.
+      1. Agent-scoped hooks are retained in place; only bundled hook script
+         paths are rewritten to use the plugin root.
       2. If ``version`` is supplied, it is injected into frontmatter
          (description, argument-hint) and title via inject_agent_version().
       3. instructions_text (copilot-instructions.md) is appended as a
@@ -548,11 +511,7 @@ def build_merged_agent_content(
     If instructions_text is empty (e.g. the source file was deleted), the
     appended section is simply omitted.
     """
-    rewritten_agent = (
-        rewrite_agent_hook_block(agent_text, plugin_hooks or {"hooks": {}})
-        if plugin_hooks
-        else agent_text
-    )
+    rewritten_agent = rewrite_agent_hook_block(agent_text)
     rewritten_agent = rewritten_agent.rstrip("\n")
     if version:
         rewritten_agent = inject_agent_version(rewritten_agent, version).rstrip("\n")
@@ -583,6 +542,9 @@ def sync_agent_file(
     verbatim (full-text equality) against existing plugin files to decide
     COPIED/SKIP; there is no partial/section-level patch.
 
+    Obsolete plugin-wide hook configurations are removed; hooks stay in the
+    agent's frontmatter.
+
     Also deletes any stale standalone copilot-instructions.md left in the
     plugin payload, since that file must never ship on its own.
     """
@@ -595,6 +557,8 @@ def sync_agent_file(
         plugin_root / "com.github.copilot" / "copilot-instructions.md",
     ]
 
+    remove_plugin_wide_hook_config(plugin_root, dry_run)
+
     if not source_agent.is_file():
         print("SKIP   agents/ENSDF-Agent.agent.md (source not found)")
         return
@@ -605,12 +569,10 @@ def sync_agent_file(
         if source_instructions.is_file()
         else ""
     )
-    plugin_hooks = build_plugin_hook_config(source_root)
     merged = build_merged_agent_content(
         agent_text,
         instructions_text,
         version,
-        plugin_hooks,
     )
 
     rel_label = target_agent.relative_to(plugin_root).as_posix()
@@ -644,7 +606,7 @@ def sync_agent_file(
 
 
 def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
-    """Package prompt-folder workflows as commands, plus scripts and skills.
+    """Package prompt workflows as commands, plus scripts, hooks, and skills.
 
     Copies new or changed files, removes stale managed files, and skips
     unchanged files plus excluded directories. Rare workflows stored in the
@@ -675,7 +637,8 @@ def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
         source_path = source_root / relative
         target_relative = source_targets[relative]
         target_path = plugin_root / target_relative
-        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if not dry_run:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
 
         copy_needed = True
         if target_path.is_file():
@@ -778,7 +741,6 @@ def main() -> int:
         version = get_canonical_version(repo_root)
     sync_readme(repo_root, plugin_root, args.dry_run)
     sync_agent_file(source_root, plugin_root, version, args.dry_run)
-    sync_plugin_hooks(source_root, plugin_root, args.dry_run)
     return sync(source_root, plugin_root, args.dry_run)
 
 

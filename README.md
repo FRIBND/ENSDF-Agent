@@ -59,11 +59,11 @@ See [VS Code's plugin troubleshooting guide](https://code.visualstudio.com/docs/
 
 ## Hooks
 
-The plugin-wide `block-root-file-creation` hook runs for any active agent. The other hooks are scoped to **ENSDF-Agent** in its agent frontmatter. They use the [VS Code hook format](https://code.visualstudio.com/docs/agent-customization/hooks).
+All hooks are scoped to **ENSDF-Agent** in its agent frontmatter and run only when that custom agent is active. VS Code forwards plugin-provided custom-agent hooks with the agent; this plugin does not use plugin-wide hooks.
 
 | Scope | Hook | Event | Behavior |
 |-------|------|-------|----------|
-| Plugin | `block-root-file-creation` | `preToolUse` | Denies protected root, `A<N>/`, and `XUNDL/` file creation; allows `.github/temp/` and non-write tools |
+| ENSDF-Agent | `block-root-file-creation` | `preToolUse` | Denies protected root, `A<N>/`, and `XUNDL/` file creation; allows `.github/temp/` and non-write tools |
 | ENSDF-Agent | `block-git-revert` | `preToolUse` | Denies unsafe `git restore`/`git checkout`; allows safe temp-scoped operations and `git switch` |
 | ENSDF-Agent | `guard_ens_edit` | `preToolUse` | Denies stale or unanchored `.ens` edits, repeated/mismatched anchors, edits over 8 lines, and `.ens` `apply_patch` |
 | ENSDF-Agent | `verify_ens_edit` | `postToolUse` | Reports non-ASCII and 80-column violations as agent context; post-tool checks cannot undo an edit that already ran |

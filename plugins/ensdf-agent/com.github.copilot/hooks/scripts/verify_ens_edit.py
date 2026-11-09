@@ -5,15 +5,15 @@ import re
 import subprocess
 import sys
 import difflib
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 MUTATING_RE = re.compile(r"--fix\b|>>?\s|Set-Content|Out-File|Add-Content|\.write_text\(|WriteAllText", re.IGNORECASE)
 EDIT_TOOLS = {
-    "replace_string_in_file",
-    "multi_replace_string_in_file",
-    "editFiles",
-    "edit/editFiles",
+    "replace_string_in_file", "multi_replace_string_in_file", "editFiles", "edit/editFiles",
+    "create", "createFile", "create_file", "edit/createFile", "writeFile",
+    "Edit", "edit", "Write", "write", "str_replace", "str_replace_editor",
 }
-CREATE_TOOLS = {"create_file", "createFile", "edit/createFile"}
 PATCH_TOOLS = {"apply_patch", "applyPatch", "edit/applyPatch", "functions.apply_patch"}
 
 # ENSDF-Agent Hook: Validate .ens files after edits
@@ -39,11 +39,11 @@ PATCH_TOOLS = {"apply_patch", "applyPatch", "edit/applyPatch", "functions.apply_
 #   - Handles all VS Code file-editing tool input shapes
 #   - Validates ALL .ens files touched by a single tool call (multi-file)
 #   - Uses hook-provided cwd for robust script path resolution
-#   - Adds Sacred Workflow guidance to agent context on failure
+#   - Returns Sacred Workflow guidance on failure; cannot undo completed tool calls
 #
 # Hook event : PostToolUse
-# On failure : additionalContext with fix instructions (the edit has already run)
-# On success : exit 0 with no additional context
+# On failure : additionalContext with fix instructions
+# On success : exit 0  (silent)
 
 
 PATCH_HEADER_PREFIXES = (
@@ -65,18 +65,6 @@ def emit(payload):
         sys.stdout.write(json.dumps(payload))
 
 
-def normalize_hook_payload(payload):
-    normalized = dict(payload)
-    normalized["tool_name"] = payload.get("toolName") or payload.get("tool_name", "")
-    normalized["tool_input"] = (
-        payload.get("toolArgs")
-        or payload.get("tool_args")
-        or payload.get("tool_input")
-        or {}
-    )
-    return normalized
-
-
 def load_input():
     """Parse the hook payload from stdin as UTF-8 (never the console code page)."""
     try:
@@ -84,16 +72,16 @@ def load_input():
     except AttributeError:
         raw = sys.stdin.read().encode("utf-8", "replace")
     if not raw.strip():
-        return {}
+        raise ValueError("Hook input was empty.")
     for enc in ("utf-8-sig", "utf-8"):
         try:
-            return json.loads(raw.decode(enc))
+            payload = json.loads(raw.decode(enc))
+            if not isinstance(payload, dict):
+                raise ValueError("Hook input was not a JSON object.")
+            return payload
         except (UnicodeDecodeError, json.JSONDecodeError):
             continue
-    try:
-        return json.loads(raw.decode(sys.stdin.encoding or "utf-8", "replace"))
-    except json.JSONDecodeError:
-        return {}
+    raise ValueError("Hook input was not valid UTF-8 JSON.")
 
 
 def file_digest(path):
@@ -102,14 +90,22 @@ def file_digest(path):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def workspace_root():
+    return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+
 def pop_expected_hashes(paths, cwd):
     """Return post-edit hash mismatches, then consume one-shot expectations."""
-    state_path = os.path.join(cwd, ".github", "temp", "ens_guard", "state.json")
+    state_path = os.path.join(workspace_root(), ".github", "temp", "ens_guard", "state.json")
     try:
         with open(state_path, encoding="utf-8") as fh:
             state = json.load(fh)
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return []
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"Cannot read ENSDF guard state {state_path}: {exc}") from exc
+    if not isinstance(state, dict):
+        raise ValueError(f"ENSDF guard state is not a JSON object: {state_path}")
 
     mismatches = []
     consumed = False
@@ -135,7 +131,7 @@ def pop_expected_hashes(paths, cwd):
 
 
 def path_value(item):
-    for field in ("filePath", "file_path", "path", "uri"):
+    for field in ("filePath", "file_path", "fileName", "file_name", "path", "uri"):
         value = item.get(field)
         if isinstance(value, str) and value:
             return value
@@ -202,7 +198,12 @@ def find_all_ens_paths(payload):
       - TOOL_INPUT_FILE_PATH env var          → set by some integrations
     """
     paths = set()
-    tool_input = payload.get("tool_input") or {}
+    tool_input = payload.get("tool_input") or payload.get("toolArgs") or {}
+    tool_name = payload.get("tool_name") or payload.get("toolName", "")
+    if isinstance(tool_input, str) and tool_name in PATCH_TOOLS:
+        tool_input = {"input": tool_input}
+    if not isinstance(tool_input, dict):
+        return []
 
     # Environment variable override (used by some Claude Code integrations)
     env_path = os.environ.get("TOOL_INPUT_FILE_PATH", "")
@@ -210,7 +211,7 @@ def find_all_ens_paths(payload):
         paths.add(env_path)
 
     # Direct and workspace-edit payloads
-    for key in ("filePath", "file_path"):
+    for key in ("filePath", "file_path", "fileName", "file_name", "path", "uri"):
         value = tool_input.get(key)
         if isinstance(value, str) and value.lower().endswith(".ens"):
             paths.add(value)
@@ -239,16 +240,16 @@ def find_all_ens_paths(payload):
                     paths.add(value)
 
     # apply_patch → parse file paths from patch header lines
-    patch_text = tool_input.get("input")
+    patch_text = tool_input.get("input") or tool_input.get("patch") or tool_input.get("patchText")
     if isinstance(patch_text, str):
-        for match in re.finditer(r"\*\*\* (?:Update|Add) File: (.+)", patch_text):
+        for match in re.finditer(r"^\*\*\* (?:Update|Add|Delete) File: (.+)$", patch_text, re.MULTILINE):
             path = match.group(1).strip()
             if path.lower().endswith(".ens"):
                 paths.add(path)
 
     # run_in_terminal / send_to_terminal → only when the command looks mutating
     # (avoids re-validating on every read-only script call)
-    command_text = tool_input.get("command")
+    command_text = tool_input.get("command") or tool_input.get("input")
     if isinstance(command_text, str) and "--dry-run" not in command_text and MUTATING_RE.search(command_text):
         for match in re.finditer(r"[^\s\"']+\.ens", command_text, re.IGNORECASE):
             paths.add(match.group(0).strip("\"'"))
@@ -279,13 +280,21 @@ def extract_changed_lines_from_pair(old_text, new_text):
 
 def extract_all_changed_lines(payload):
     """Collect all changed ENSDF lines across all replacements in this tool call."""
-    tool_name = payload.get("tool_name", "")
-    tool_input = payload.get("tool_input") or {}
+    tool_name = payload.get("tool_name") or payload.get("toolName", "")
+    tool_input = payload.get("tool_input") or payload.get("toolArgs") or {}
 
-    if tool_name == "apply_patch":
-        patch_text = tool_input.get("input", "")
+    if tool_name in PATCH_TOOLS:
+        if isinstance(tool_input, str):
+            patch_text = tool_input
+        elif isinstance(tool_input, dict):
+            patch_text = tool_input.get("input") or tool_input.get("patch") or tool_input.get("patchText", "")
+        else:
+            patch_text = ""
         if isinstance(patch_text, str):
             return extract_changed_lines_from_patch(patch_text)
+
+    if not isinstance(tool_input, dict):
+        return []
 
     changed = []
 
@@ -322,17 +331,15 @@ def comment_only_edit(payload):
 
 def find_ruler_script(payload):
     """Locate bundled ruler first, then the workspace copy."""
-    cwd = payload.get("cwd", "") or os.getcwd()
     plugin_root = os.environ.get("PLUGIN_ROOT", "")
     if plugin_root:
         candidate = os.path.join(plugin_root, "scripts", "ensdf_1line_ruler.py")
         if os.path.isfile(candidate):
             return candidate
-    candidate = os.path.join(cwd, ".github", "scripts", "ensdf_1line_ruler.py")
+    candidate = os.path.join(workspace_root(), ".github", "scripts", "ensdf_1line_ruler.py")
     if os.path.isfile(candidate):
         return candidate
-    # Fallback to relative path (works when subprocess cwd is workspace root)
-    return os.path.join(".github", "scripts", "ensdf_1line_ruler.py")
+    return candidate
 
 
 def run_ruler(ruler_script, file_path):
@@ -346,6 +353,14 @@ def run_ruler(ruler_script, file_path):
 
 def resolve_path(path, cwd):
     """Resolve a potentially relative path against a base directory."""
+    if path.lower().startswith("file:"):
+        parsed = urlsplit(path)
+        if parsed.query or parsed.fragment:
+            raise ValueError("File URI must not contain a query or fragment.")
+        uri_path = parsed.path
+        if parsed.netloc and parsed.netloc.lower() != "localhost":
+            uri_path = "//" + parsed.netloc + uri_path
+        path = url2pathname(uri_path)
     if os.path.isabs(path):
         return path
     return os.path.normpath(os.path.join(cwd, path))
@@ -360,14 +375,17 @@ def check_ascii_only(abs_path):
                 non_ascii = [c for c in line if ord(c) > 127]
                 if non_ascii:
                     violations.append((lineno, line.rstrip("\n"), non_ascii))
-    except Exception:
-        pass
+    except OSError as exc:
+        raise OSError(f"Cannot read ENSDF file {abs_path}: {exc}") from exc
     return violations
 
 
 def validate_ens_ascii(abs_path):
     """Check file for non-ASCII characters. Return (is_clean, error_text)."""
-    vios = check_ascii_only(abs_path)
+    try:
+        vios = check_ascii_only(abs_path)
+    except OSError as exc:
+        return False, str(exc)
     if not vios:
         return True, ""
     lines = []
@@ -398,19 +416,29 @@ def is_mutating_call(payload):
     Popping tokens for read calls caused false
     "changed since your last read/edit (concurrent edit)" denials.
     """
-    tool = payload.get("tool_name", "")
-    if tool in EDIT_TOOLS or tool in PATCH_TOOLS or tool in CREATE_TOOLS:
+    tool = payload.get("tool_name") or payload.get("toolName", "")
+    if tool in EDIT_TOOLS or tool in PATCH_TOOLS:
         return True
-    command = (payload.get("tool_input") or {}).get("command")
+    tool_input = payload.get("tool_input") or payload.get("toolArgs") or {}
+    if not isinstance(tool_input, dict):
+        return False
+    command = tool_input.get("command")
     return isinstance(command, str) and "--dry-run" not in command and bool(MUTATING_RE.search(command))
 
 
 def main():
-    payload = normalize_hook_payload(load_input())
-    tool = payload.get("tool_name", "")
+    try:
+        payload = load_input()
+    except ValueError as exc:
+        emit({"additionalContext": f"ENSDF post-tool hook could not parse event input: {exc}"})
+        return
+    tool = payload.get("tool_name") or payload.get("toolName", "")
+    if not isinstance(tool, str) or not tool.strip():
+        emit({"additionalContext": "ENSDF post-tool hook could not parse event input: no valid tool name."})
+        return
 
     # Read-only calls: nothing to validate; the guard token must survive.
-    if tool in ("read_file", "readFile", "read/readFile"):
+    if tool in ("read_file", "readFile", "read/readFile", "Read", "read", "view"):
         emit({})
         return
 
@@ -424,13 +452,25 @@ def main():
     mismatches = pop_expected_hashes(ens_paths, cwd) if is_mutating_call(payload) else []
     if mismatches:
         files = "\n".join(f"  {path}" for path, _, _ in mismatches)
-        emit({"additionalContext": (
+        if "error" in payload or payload.get("hook_event_name") == "PostToolUseFailure":
+            context = (
+                "The ENSDF tool action failed and the file content differs from the "
+                "PreToolUse prediction. The failure may have left partial changes; "
+                "the action was not undone.\n"
+            )
+        else:
+            context = (
                 "ENSDF post-edit content differs from the PreToolUse prediction. "
+                "The completed tool action was not undone. "
                 "The edit may have collapsed, expanded, or otherwise rewritten an unintended block.\n"
+            )
+        emit({
+            "additionalContext": (
+                context +
                 f"Affected file(s):\n{files}\n"
-                "The tool action already completed; re-read the affected block, inspect the diff, "
-                "and rebuild a smaller exact edit."
-            )})
+                "Re-read the affected block, inspect the diff, and rebuild a smaller exact edit."
+            ),
+        })
         return
 
     # ===== PASS 1: ASCII-only validation (ALWAYS — data records AND comments) =====
@@ -439,6 +479,7 @@ def main():
     for path in ens_paths:
         abs_path = resolve_path(path, cwd)
         if not os.path.isfile(abs_path):
+            ascii_errors.append(f"ENSDF file is missing after the tool action: {abs_path}")
             continue
         clean, err = validate_ens_ascii(abs_path)
         if not clean:
@@ -446,11 +487,13 @@ def main():
 
     if ascii_errors:
         error_text = "\n\n".join(ascii_errors)
-        emit({"additionalContext": (
-                "ENSDF ASCII-only violation. .ens files must use standard ASCII.\n\n"
-                "The tool action already completed; correct the file before continuing.\n\n"
+        emit({
+            "additionalContext": (
+                "ENSDF ASCII validation failed after the tool action, which was not undone. "
+                ".ens files must be readable and use standard ASCII.\n\n"
                 f"{error_text}"
-            )})
+            ),
+        })
         return
 
     # ===== PASS 2: 80-column ruler validation (DATA RECORDS ONLY) =====
@@ -466,7 +509,11 @@ def main():
         abs_path = resolve_path(path, cwd)
         if not os.path.isfile(abs_path):
             continue
-        result = run_ruler(ruler_script, abs_path)
+        try:
+            result = run_ruler(ruler_script, abs_path)
+        except OSError as exc:
+            all_errors.append(f"Could not run ENSDF ruler for {abs_path}: {exc}")
+            continue
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()
             all_errors.append(f"FILE: {abs_path}\n{output}")
@@ -476,8 +523,10 @@ def main():
         return
 
     error_text = "\n\n".join(all_errors)
-    emit({"additionalContext": (
-            "ENSDF 80-column validation failed. Fix the data-record edit before continuing.\n\n"
+    emit({
+        "additionalContext": (
+            "ENSDF 80-column validation failed after the tool action, which was not undone. "
+            "Fix the data-record edit before continuing.\n\n"
             "Sacred Workflow (ENSDF-Agent.agent.md — MANDATORY):\n"
             "  EDIT -> VALIDATE -> CONFIRM -> REPEAT\n\n"
             "Required steps:\n"
@@ -486,10 +535,18 @@ def main():
             '  3. Re-run: python .github/scripts/ensdf_1line_ruler.py --line "<fixed line>"\n'
             "  4. Confirm exit code 0 before proceeding to the next edit.\n\n"
             "Do NOT make multiple edits before validating each one.\n\n"
-            "The tool action already completed; fix and validate the file now.\n\n"
             f"Validation errors:\n{error_text}"
-        )})
+        ),
+    })
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        emit({
+            "additionalContext": (
+                "ENSDF post-tool validation hook failed after the tool action; "
+                f"the action was not undone: {exc}"
+            ),
+        })

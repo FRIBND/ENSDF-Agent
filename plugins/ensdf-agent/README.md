@@ -59,20 +59,20 @@ See [VS Code's plugin troubleshooting guide](https://code.visualstudio.com/docs/
 
 ## Hooks
 
-The plugin-wide `block-root-file-creation` hook runs for any active agent. The other hooks are scoped to **ENSDF-Agent** in its agent frontmatter. They use the [VS Code hook format](https://code.visualstudio.com/docs/agent-customization/hooks).
+All hooks are scoped to **ENSDF-Agent** in its agent frontmatter and run only when that custom agent is active. VS Code forwards plugin-provided custom-agent hooks with the agent; this plugin does not use plugin-wide hooks.
 
 | Scope | Hook | Event | Behavior |
 |-------|------|-------|----------|
-| Plugin | `block-root-file-creation` | `preToolUse` | Denies protected root, `A<N>/`, and `XUNDL/` file creation; allows `.github/temp/` and non-write tools |
+| ENSDF-Agent | `block-root-file-creation` | `preToolUse` | Denies protected root, `A<N>/`, and `XUNDL/` file creation; allows `.github/temp/` and non-write tools |
 | ENSDF-Agent | `block-git-revert` | `preToolUse` | Denies unsafe `git restore`/`git checkout`; allows safe temp-scoped operations and `git switch` |
 | ENSDF-Agent | `guard_ens_edit` | `preToolUse` | Denies stale or unanchored `.ens` edits, repeated/mismatched anchors, edits over 8 lines, and `.ens` `apply_patch` |
 | ENSDF-Agent | `verify_ens_edit` | `postToolUse` | Reports non-ASCII and 80-column violations as agent context; post-tool checks cannot undo an edit that already ran |
 
 
 ## Caveats
-- VS Code supports profile-wide (**User**) and workspace-scoped (**Workspace**) plugin installation. If **ENSDF-Agent** does not appear, confirm plugins are enabled and the plugin is enabled for the intended harness and scope; then start a fresh chat.
+- Since March 2026, the VS Code team has been prioritizing excessively frequent updates to AI features at the expense of the stability and reliability of the development environment, leading to mounting frustration among users. The usability of **ENSDF-Agent** could be negatively impacted by these updates. The FRIB Nuclear Data Group is actively monitoring the VS Code updates and is committed to providing timely fixes to ensure the usability of **ENSDF-Agent**.
 - VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `com.github.copilot/agents/ENSDF-Agent.agent.md` instead.
-- Agent Skills performance and reliability vary based on the underlying LLM capabilities and the complexity of the task.
+- Agent Skills performance and reliability vary based on the underlying LLM capabilities.
 
 - VS Code extension-contributed agents and skills will negatively impact the user experience of **ENSDF-Agent**. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the chat menu. Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable: Click the Gear icon (Manage) directly on the extension list item. Select Disable (Workspace) from the dropdown menu.
 

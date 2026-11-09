@@ -52,25 +52,23 @@ import json
 import os
 import re
 import sys
-from urllib.parse import unquote, urlparse
+from typing import NoReturn
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 SPAN = 8  # max lines in one oldString
 ENS_PATH_RE = re.compile(r"[^\s\"']+\.ens", re.IGNORECASE)
 MUTATING_RE = re.compile(r"--fix\b|>>?\s|Set-Content|Out-File|Add-Content|\.write_text\(|WriteAllText", re.IGNORECASE)
-EDIT_TOOLS = {"replace_string_in_file", "multi_replace_string_in_file", "editFiles", "edit/editFiles"}
-READ_TOOLS = {"read_file", "readFile", "read/readFile"}
-PATCH_TOOLS = {"apply_patch", "applyPatch", "edit/applyPatch", "functions.apply_patch"}
-TERMINAL_TOOLS = {
-    "run_in_terminal",
-    "runInTerminal",
-    "execute/runInTerminal",
-    "send_to_terminal",
-    "sendToTerminal",
-    "execute/sendToTerminal",
+EDIT_TOOLS = {
+    "replace_string_in_file", "multi_replace_string_in_file", "editFiles", "edit/editFiles",
+    "create", "createFile", "create_file", "edit/createFile", "writeFile",
+    "Edit", "edit", "Write", "write", "str_replace", "str_replace_editor",
 }
+READ_TOOLS = {"read_file", "readFile", "read/readFile", "Read", "read", "view"}
+PATCH_TOOLS = {"apply_patch", "applyPatch", "edit/applyPatch", "functions.apply_patch"}
 
 
-def deny(reason):
+def deny(reason: str) -> NoReturn:
     payload = json.dumps({
         "permissionDecision": "deny",
         "permissionDecisionReason": reason,
@@ -100,31 +98,38 @@ def load_event():
     except AttributeError:
         raw = sys.stdin.read().encode("utf-8", "replace")
     if not raw.strip():
-        return {}
+        raise ValueError("Hook input was empty.")
     for enc in ("utf-8-sig", "utf-8"):
         try:
-            return json.loads(raw.decode(enc))
+            payload = json.loads(raw.decode(enc))
+            if not isinstance(payload, dict):
+                raise ValueError("Hook input was not a JSON object.")
+            return payload
         except (UnicodeDecodeError, json.JSONDecodeError):
             continue
-    try:
-        return json.loads(raw.decode(sys.stdin.encoding or "utf-8", "replace"))
-    except json.JSONDecodeError:
-        return {}
+    raise ValueError("Hook input was not valid UTF-8 JSON.")
 
 
-def workspace_root(data):
+def working_directory(data):
     cwd = data.get("cwd")
     if isinstance(cwd, str) and cwd.strip():
         return os.path.realpath(os.path.normpath(cwd))
     return os.path.realpath(os.getcwd())
 
 
+def workspace_root():
+    return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+
 def key_of(path, root):
-    if path.startswith("file://"):
-        parsed = urlparse(path)
-        path = unquote(parsed.path)
-        if re.match(r"^/[A-Za-z]:/", path):
-            path = path[1:]
+    if path.lower().startswith("file:"):
+        parsed = urlsplit(path)
+        if parsed.query or parsed.fragment:
+            raise ValueError("File URI must not contain a query or fragment.")
+        uri_path = parsed.path
+        if parsed.netloc and parsed.netloc.lower() != "localhost":
+            uri_path = "//" + parsed.netloc + uri_path
+        path = url2pathname(uri_path)
     if os.path.isabs(path):
         return os.path.realpath(path)
     return os.path.realpath(os.path.join(root, path))
@@ -157,7 +162,7 @@ def state_save(state, state_path):
 
 
 def path_value(item):
-    for field in ("filePath", "file_path", "path", "uri"):
+    for field in ("filePath", "file_path", "fileName", "file_name", "path", "uri"):
         value = item.get(field)
         if isinstance(value, str) and value:
             return value
@@ -183,12 +188,21 @@ def edit_operations(data):
         paths.add(path)
         old = text_value(item, "oldString", "old_string", "oldText", "old_text")
         new = text_value(item, "newString", "new_string", "newText", "new_text")
-        if old is not None and new is not None:
-            operations.append((path, old.replace("\r\n", "\n"), new.replace("\r\n", "\n")))
+        if old is None or new is None:
+            deny(".ens edit has no exact old/new text anchor. Use editFiles with files[].edits[].oldText/newText.")
+        operations.append((path, old.replace("\r\n", "\n"), new.replace("\r\n", "\n")))
 
     direct_path = path_value(data)
     if direct_path:
-        add(direct_path, data)
+        nested = any(data.get(field) for field in ("replacements", "files", "edits", "operations"))
+        has_direct_text = any(field in data for field in (
+            "oldString", "old_string", "oldText", "old_text",
+            "newString", "new_string", "newText", "new_text",
+        ))
+        if not nested or has_direct_text:
+            add(direct_path, data)
+        elif direct_path.lower().endswith(".ens"):
+            paths.add(direct_path)
 
     for item in data.get("replacements") or []:
         if isinstance(item, dict):
@@ -340,8 +354,8 @@ def guard_comment_operations(operations, state, root):
 def guard_edits(data, state, root):
     """Check exact anchors for all supported edit payload shapes."""
     operations, paths = edit_operations(data)
-    if paths and not operations:
-            deny(".ens edit has no exact old/new text anchor. Use editFiles with files[].edits[].oldText/newText.")
+    if paths - {path for path, _, _ in operations}:
+        deny(".ens edit has no exact old/new text anchor. Use editFiles with files[].edits[].oldText/newText.")
     return guard_operations(operations, state, root)
 
 
@@ -371,35 +385,45 @@ def guard_terminal(command, state, root):
 
 def main():
     event = load_event()
-    tool = event.get("toolName") or event.get("tool_name", "")
-    data = (
-        event.get("toolArgs")
-        or event.get("tool_args")
-        or event.get("tool_input")
-        or {}
-    )
-    root = workspace_root(event)
-    state_path = os.path.join(root, ".github", "temp", "ens_guard", "state.json")
+    tool = event.get("tool_name") or event.get("toolName", "")
+    if not isinstance(tool, str) or not tool.strip():
+        deny("Hook input has no valid tool name.")
+    data = event.get("tool_input") or event.get("toolArgs") or {}
+    if isinstance(data, str):
+        data = {"input": data}
+    elif not isinstance(data, dict):
+        deny("Hook tool input must be a JSON object or patch string.")
+    root = working_directory(event)
+    state_path = os.path.join(workspace_root(), ".github", "temp", "ens_guard", "state.json")
     state = state_load(state_path)
 
     if tool in READ_TOOLS:  # a read refreshes freshness; verify skips reads so it is not consumed
-        path = data.get("filePath", "")
-        if path.lower().endswith(".ens"):
+        path = (
+            data.get("filePath") or data.get("file_path") or data.get("fileName")
+            or data.get("file_name") or data.get("path") or data.get("uri") or ""
+        )
+        if isinstance(path, str) and path.lower().endswith(".ens"):
             text = read(key_of(path, root))
             if text is not None:
                 state[key_of(path, root)] = digest(text)
                 state_save(state, state_path)
         return
 
-    if tool in PATCH_TOOLS:
-        patch_text = data.get("input", "") or ""
+    patch_text = data.get("input") or data.get("patch", "") or ""
+    is_patch = tool in PATCH_TOOLS or (
+        isinstance(patch_text, str) and patch_text.startswith("*** Begin Patch")
+    )
+    if is_patch:
         if re.search(r"^\*\*\* (?:Update|Add|Delete) File: .*\.ens", patch_text, re.IGNORECASE | re.MULTILINE):
             operations = comment_patch_operations(patch_text, root)
             if guard_comment_operations(operations, state, root):
                 state_save(state, state_path)
         return
 
-    if tool in TERMINAL_TOOLS:
+    if tool in (
+        "run_in_terminal", "runInTerminal", "execute/runInTerminal", "send_to_terminal",
+        "Bash", "bash", "PowerShell", "powershell",
+    ):
         if guard_terminal(data.get("command", "") or "", state, root):
             state_save(state, state_path)
         return
