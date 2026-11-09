@@ -4,7 +4,8 @@
   "version": "0.6.3",
   "description": "ENSDF-Agent for nuclear data evaluation",
   "author": {
-    "name": "FRIB Nuclear Data Group"
+    "name": "FRIB Nuclear Data Group",
+    "email": "nucleardata@frib.msu.edu"
   },
   "homepage": "https://github.com/FRIBND/ENSDF-Agent",
   "repository": "https://github.com/FRIBND/ENSDF-Agent",

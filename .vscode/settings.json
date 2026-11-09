@@ -2,5 +2,8 @@
   "chat.plugins.enabled": true,
   "chat.plugins.marketplaces": [
     "FRIBND/ENSDF-Agent"
-  ]
+  ],
+  "json.schemaDownload.trustedDomains": {
+    "https://agent-plugins.org": true
+  }
 }

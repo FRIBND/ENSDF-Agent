@@ -12,6 +12,9 @@
 	"settings": {
 		"chat.tools.terminal.autoApprove": {
 			"git ls-tree": true
+		},
+		"json.schemaDownload.trustedDomains": {
+			"https://agent-plugins.org": true
 		}
 	}
 }

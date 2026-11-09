@@ -7,17 +7,17 @@ model: ["claude-fable-5.1"]
 hooks:
   preToolUse:
     - type: command
-      command: "python \"${PLUGIN_ROOT}/hooks/scripts/block-git-revert.py\""
-      windows: "powershell -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/hooks/scripts/block-git-revert.ps1\""
+      command: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/block-git-revert.py\""
+      windows: "powershell -ExecutionPolicy Bypass -File \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/block-git-revert.ps1\""
       timeoutSec: 10
     - type: command
-      command: "python \"${PLUGIN_ROOT}/hooks/scripts/guard_ens_edit.py\""
-      windows: "python \"${PLUGIN_ROOT}/hooks/scripts/guard_ens_edit.py\""
+      command: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/guard_ens_edit.py\""
+      windows: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/guard_ens_edit.py\""
       timeoutSec: 20
   postToolUse:
     - type: command
-      command: "python \"${PLUGIN_ROOT}/hooks/scripts/verify_ens_edit.py\""
-      windows: "python \"${PLUGIN_ROOT}/hooks/scripts/verify_ens_edit.py\""
+      command: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/verify_ens_edit.py\""
+      windows: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/verify_ens_edit.py\""
       timeoutSec: 30
 ---
 

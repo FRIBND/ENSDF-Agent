@@ -253,9 +253,9 @@ def rewrite_plugin_hook_path(command: str) -> str:
     ``${PLUGIN_ROOT}`` and be quoted for paths containing spaces.
     """
     command = command.replace("\\", "/")
-    command = command.replace(".github/hooks/", "${PLUGIN_ROOT}/hooks/")
+    command = command.replace(".github/hooks/", "${PLUGIN_ROOT}/com.github.copilot/hooks/")
     return re.sub(
-        r'(?<!["\'])\$\{PLUGIN_ROOT\}/hooks/[^\s"\']+',
+        r'(?<!["\'])\$\{PLUGIN_ROOT\}/com\.github\.copilot/hooks/[^\s"\']+',
         r'"\g<0>"',
         command,
     )

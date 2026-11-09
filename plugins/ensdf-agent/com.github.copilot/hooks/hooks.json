@@ -4,8 +4,8 @@
     "preToolUse": [
       {
         "type": "command",
-        "command": "python \"${PLUGIN_ROOT}/hooks/scripts/block-root-file-creation.py\"",
-        "powershell": "python \"${PLUGIN_ROOT}/hooks/scripts/block-root-file-creation.py\"",
+        "command": "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/block-root-file-creation.py\"",
+        "powershell": "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/block-root-file-creation.py\"",
         "timeoutSec": 10
       }
     ]
