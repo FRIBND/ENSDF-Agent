@@ -1,20 +1,25 @@
 """
-Regenerates the plugins/ensdf-agent/ payload from the local ENSDF workspace
-(default source: D:/X/ND/ENSDF/.github).
+Regenerates the plugin payload at the repository root from the local ENSDF
+workspace (default source: D:/X/ND/ENSDF/.github).
 
 Run from the repository root with: python dev/sync_plugin_from_local_agent.py
 
+The plugin root is the repository root because VS Code's "Install Plugin from
+Source" only looks for a manifest at the repository root (plugin.json or
+.plugin/plugin.json). Keeping the payload at the root also keeps bundled paths
+resolvable after installation.
+
 Run order, see main():
     1. bump_versions()     - bump manifests and return canonical version.
-    2. sync_readme()       - copy repo README if changed.
-    3. sync_agent_file()   - generate the single agent in
+    2. sync_agent_file()   - generate the single agent in
                              com.github.copilot/agents/ from source; retain
                              agent-scoped hooks.
-    4. sync()              - mirror skills/, skills-dormant/, scripts/, and
+    3. sync()              - mirror skills/, skills-dormant/, scripts/, and
                              hooks/scripts/, adapting bundled references.
 
-plugin.json is plugin-owned. Agent and hook outputs are generated in the Agent
-Plugins 1.0 Copilot namespace; legacy root copies are removed.
+plugin.json is plugin-owned; .plugin/plugin.json is a compatibility copy kept
+identical for clients that only probe that location. Agent and hook outputs are
+generated in the Agent Plugins 1.0 Copilot namespace.
 """
 
 from __future__ import annotations
@@ -55,7 +60,8 @@ excluded_segments = {
 # first entry is canonical: its "version" value is read as the old version
 # before bumping, then the new version is written to every file in this list.
 version_files = [
-    Path("plugins/ensdf-agent/plugin.json"),  # canonical source
+    Path("plugin.json"),  # canonical source
+    Path(".plugin/plugin.json"),  # legacy OpenPlugin compatibility copy
     Path(".github/plugin/marketplace.json"),
 ]
 
@@ -776,18 +782,30 @@ def remove_empty_directories(root: Path) -> None:
 
 
 def collect_excluded_directories(root: Path) -> list[Path]:
-    directories = [
-        path
-        for path in root.rglob("*")
-        if path.is_dir() and path.name in excluded_segments
-    ]
-    return sorted(set(directories), reverse=True)
+    """Find excluded directories inside managed payload only.
+
+    The plugin root is also the repository root, so scanning the whole tree
+    would reach unrelated directories such as ``.venv`` or ``state``.
+    """
+    directories: set[Path] = set()
+    for entry in managed_plugin_entries:
+        base = root / entry
+        if not base.is_dir():
+            continue
+        directories.update(
+            path
+            for path in base.rglob("*")
+            if path.is_dir() and path.name in excluded_segments
+        )
+    return sorted(directories, reverse=True)
 
 
 def sync_readme(repo_root: Path, plugin_root: Path, dry_run: bool) -> None:
     """Copy repo-root README.md into the plugin payload directory."""
     source = repo_root / "README.md"
     target = plugin_root / "README.md"
+    if source.resolve() == target.resolve():
+        return
     if not source.is_file():
         print("SKIP   README.md (source not found)")
         return
@@ -1405,7 +1423,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[1]
-    plugin_root = repo_root / "plugins" / "ensdf-agent"
+    # The repository root is the plugin root: VS Code's "Install Plugin from
+    # Source" only checks the manifest at the repository root.
+    plugin_root = repo_root
     source_root = Path(r"D:\X\ND\ENSDF\.github")
 
     settings_content = None
@@ -1430,6 +1450,8 @@ def main() -> int:
         for dependency in dependencies:
             print(f"  {dependency}")
         print()
+    # Create the compatibility manifest first: version bumping requires it.
+    sync_compat_manifest(plugin_root, args.dry_run)
     planned_version = None
     if not args.no_bump:
         new_version = bump_versions(repo_root, args.bump, args.dry_run)
@@ -1437,12 +1459,36 @@ def main() -> int:
             planned_version = new_version
     else:
         get_canonical_version(repo_root)
-    sync_compat_manifest(plugin_root, args.dry_run, planned_version)
+    if planned_version is not None:
+        sync_compat_manifest(plugin_root, args.dry_run, planned_version)
     if settings_content is not None:
         sync_vscode_settings(plugin_root, settings_content, args.dry_run)
-    sync_readme(repo_root, plugin_root, args.dry_run)
     sync_agent_file(source_root, plugin_root, args.dry_run)
-    return sync(source_root, plugin_root, args.dry_run)
+    result = sync(source_root, plugin_root, args.dry_run)
+    if not args.dry_run:
+        validate_manifest_locations(plugin_root)
+    return result
+
+
+def validate_manifest_locations(plugin_root: Path) -> None:
+    """Fail loudly if the manifests the installer probes are missing or differ.
+
+    VS Code's "Install Plugin from Source" looks for a manifest at the
+    repository root, so a payload placed in a subdirectory is not installable.
+    """
+    canonical = plugin_root / "plugin.json"
+    compatibility = plugin_root / ".plugin" / "plugin.json"
+    if not canonical.is_file():
+        raise FileNotFoundError(f"Plugin manifest missing from repository root: {canonical}")
+    if not compatibility.is_file():
+        raise FileNotFoundError(f"Compatibility manifest missing: {compatibility}")
+    if canonical.read_bytes() != compatibility.read_bytes():
+        raise ValueError("plugin.json and .plugin/plugin.json differ; run sync to align them")
+    manifest = json.loads(canonical.read_text(encoding="utf-8"))
+    for entry in ("skills", "com.github.copilot"):
+        if not (plugin_root / entry).is_dir():
+            raise FileNotFoundError(f"Plugin component missing next to plugin.json: {entry}")
+    print(f"Manifest check: plugin.json ({manifest.get('version')}) with .plugin copy and components present")
 
 
 if __name__ == "__main__":

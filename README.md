@@ -16,7 +16,9 @@ Install from the Git repository:
 2. Type **Chat: Install Plugin from Source** and press Enter.
 3. Enter `FRIBND/ENSDF-Agent` and press Enter.
 
-Occasionally, it shows `Failed to install plugin` for no reason.
+The plugin manifest is at the repository root, which **Chat: Install Plugin from Source** requires.
+
+Sometimes, it shows `Failed to install plugin` for no reason or for an ambiguous reason.
 
 Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace).
 

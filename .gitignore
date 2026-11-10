@@ -7,3 +7,8 @@ __pycache__/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Local development artifacts (the repository root is the shipped plugin)
+.venv/
+state/
+.pytest_cache/
