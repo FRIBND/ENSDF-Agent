@@ -180,6 +180,9 @@ def main():
 
 
 if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1:
+        raise SystemExit("This source version of ens2pdf.py does not accept command-line arguments; configure its paths and selection before running.")
     main()
 
 

@@ -1,5 +1,6 @@
 ---
 name: alpha-decay-q-value
+disable-model-invocation: true
 description: >
   Use this skill when calculating Q-alpha values from measured alpha energies
   and updating the Q field (cols 65-74) and DQ field (cols 75-76) in ENSDF
@@ -7,9 +8,12 @@ description: >
   single files or chains of alpha-decay datasets.
 ---
 
+> Bundled relative paths are relative to this file. Plugin command paths use `<plugin-root>` as a placeholder, not an environment variable. Find the installed directory containing `plugin.json`, replace the placeholder with its absolute path, and quote/escape the full path for the shell in use before executing. The workspace remains the working directory for data files.
+
+
 # Alpha Decay Q-Value Calculation and P Record Update
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## Purpose
 
@@ -72,7 +76,7 @@ new_line = s[:64] + str(Q).ljust(10) + str(DQ).ljust(2) + s[76:80] + '\n'
 
 Run ruler on the modified P record line:
 ```
-python .github/scripts/ensdf_1line_ruler.py --line "modified line here"
+python "<plugin-root>/scripts/ensdf_1line_ruler.py" --line "modified line here"
 ```
 
 ## Example

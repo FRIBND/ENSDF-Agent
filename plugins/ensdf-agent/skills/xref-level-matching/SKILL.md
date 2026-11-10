@@ -5,9 +5,12 @@ description: >
 argument-hint: "[adopted.ens] [dataset.ens ...]"
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # XREF Level Matching: Adopted vs. Dataset Levels
 
-XREF syntax and record layout: `.github/agents/ENSDF-Agent.agent.md`. An XREF record indicates that the referenced datasets also contain the same nuclear level as the corresponding adopted level.
+XREF syntax and record layout: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. An XREF record indicates that the referenced datasets also contain the same nuclear level as the corresponding adopted level.
 
 Trace each adopted level through its XREF labels (`-(…)` cites every dataset except those listed) to the referenced dataset's level (the `(energy)` qualifier locates it); if a label gives no energy and no `*`, pair levels one-to-one to the most likely candidate level, preferring Jπ-compatible levels and excluding levels already located by an energy.
 

@@ -90,13 +90,13 @@ def file_digest(path):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def workspace_root():
-    return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+def workspace_root(cwd):
+    return os.path.realpath(os.path.abspath(cwd))
 
 
 def pop_expected_hashes(paths, cwd, is_failure=False):
     """Return post-edit mismatches and whether any path changed, then consume tokens."""
-    state_path = os.path.join(workspace_root(), ".github", "temp", "ens_guard", "state.json")
+    state_path = os.path.join(workspace_root(cwd), ".github", "temp", "ens_guard", "state.json")
     try:
         with open(state_path, encoding="utf-8") as fh:
             state = json.load(fh)
@@ -346,12 +346,11 @@ def comment_only_edit(payload):
 
 def find_ruler_script(payload):
     """Locate bundled ruler first, then the workspace copy."""
-    plugin_root = os.environ.get("PLUGIN_ROOT", "")
-    if plugin_root:
-        candidate = os.path.join(plugin_root, "scripts", "ensdf_1line_ruler.py")
-        if os.path.isfile(candidate):
-            return candidate
-    candidate = os.path.join(workspace_root(), ".github", "scripts", "ensdf_1line_ruler.py")
+    plugin_root = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    candidate = os.path.join(plugin_root, "scripts", "ensdf_1line_ruler.py")
+    if os.path.isfile(candidate):
+        return candidate
+    candidate = os.path.join(workspace_root(payload.get("cwd") or os.getcwd()), ".github", "scripts", "ensdf_1line_ruler.py")
     if os.path.isfile(candidate):
         return candidate
     return candidate
@@ -555,7 +554,7 @@ def main():
             "Required steps:\n"
             "  1. Identify the misaligned field from the error output below.\n"
             "  2. Fix ONE field at a time using replace_string_in_file or editFiles.\n"
-            '  3. Re-run: python .github/scripts/ensdf_1line_ruler.py --line "<fixed line>"\n'
+            f"  3. Re-run the ENSDF ruler at {ruler_script} on the fixed line, using a shell-quoted path.\n"
             "  4. Confirm exit code 0 before proceeding to the next edit.\n\n"
             "Do NOT make multiple edits before validating each one.\n\n"
             f"Validation errors:\n{error_text}"

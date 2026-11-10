@@ -5,9 +5,12 @@ description: >
 argument-hint: "[ENSDF file or level energy]"
 ---
 
+> Bundled relative paths are relative to this file. Plugin command paths use `<plugin-root>` as a placeholder, not an environment variable. Find the installed directory containing `plugin.json`, replace the placeholder with its absolute path, and quote/escape the full path for the shell in use before executing. The workspace remains the working directory for data files.
+
+
 # ENSDF L-Transfer Comments Standardization
 
-ENSDF rules and column positions: `.github/agents/ENSDF-Agent.agent.md`.
+ENSDF rules and column positions: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## Task Customization & Configuration
 
@@ -36,7 +39,7 @@ Standardize only the L-transfer portion of cL J$ comments. Preserve all other J$
 
 1. Map each non-asterisk XREF letter to its reaction dataset.
 2. Read the L-transfer field (cols 56–64) from the matched source L-record. **Never** use old adopted comment text as the L value source.
-3. Run `python .github/scripts/angular_momentum_coupling.py Jπ_target Jπ_particle` to compute allowed Jπ for each L value.
+3. Run `python "<plugin-root>/scripts/angular_momentum_coupling.py" Jπ_target Jπ_particle` to compute allowed Jπ for each L value.
    > **Two-layer accuracy check:** (a) quoted L-value must match source cols 56–64 — never trust existing comment text; (b) deduced Jπ range must be correct per the script. L=A+B (simultaneous) requires AND intersection, not union. L=A,B (alternative) requires separate sub-clauses, and then the union of their Jπ results. Every L-transfer clause must include an explicit `gives <Jπ_results>`.
 4. Write standardized cL J$ comment, preserving all non-L-transfer arguments exactly.
 5. **Completeness:** Each non-asterisk XREF letter with non-blank L-field must appear in the cL J$ comment; angular momentum couplings yielding too many Jπ values may be omitted if other stronger constraints exist.

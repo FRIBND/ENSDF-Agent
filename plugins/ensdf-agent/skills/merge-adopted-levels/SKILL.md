@@ -3,9 +3,12 @@ name: merge-adopted-levels
 description: Merges two or more adopted ENSDF L-records (or a dataset's level into an existing adopted level) into one record with union XREF and each dataset's owned fields. Use when one physical level but wrongly split into separate records.
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # Merge Adopted Levels
 
-ENSDF 80-column record/field definitions, structural rules, column positions, uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column record/field definitions, structural rules, column positions, uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 *Fill in:* adopted file; the L-records to group; dataset letters and source files.
 1. Read each source dataset; confirm one physical level (E within DE, compatible Jπ); never group levels a dataset reports as distinct.
 2. Build the ownership map first: which dataset supplies E/DE, Jπ, T/DT, L, S/DS, each G-record, continuation and comment.
@@ -15,4 +18,4 @@ ENSDF 80-column record/field definitions, structural rules, column positions, un
 6. Validate each edited line, then column calibration and gamma ordering; edit in place, never scripts.
 7. Relocating a record can drop its trailing padding: re-run `column_calibrate.py --fix` (data records only, comments are skipped) and pad comment lines by hand, then re-check every moved line's length.
 
-Inverse: `.github/skills/split-adopted-levels/SKILL.md`.
+Inverse: `../split-adopted-levels/SKILL.md`.

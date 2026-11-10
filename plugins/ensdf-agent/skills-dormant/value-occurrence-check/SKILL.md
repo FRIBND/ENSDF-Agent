@@ -1,5 +1,6 @@
 ---
 name: value-occurrence-check
+disable-model-invocation: true
 description: >
   Use this skill when checking consistency of nuclear level energies across
   multiple occurrences in a gamma-ray transition CSV, Markdown, or table. Verifies that energy, uncertainty, and J-π are identical wherever
@@ -8,6 +9,9 @@ description: >
   forward/backward verification.
 argument-hint: [CSV, Markdown, or pipe table file]
 ---
+
+> Bundled relative paths are relative to this file.
+
 
 # Value Occurrence Check
 
@@ -26,7 +30,7 @@ Verify that every nuclear level energy appearing multiple times in a gamma-ray t
 
 ### Step 1: Column Mapping
 
-Follow the bidirectional column mapping protocol from `.github/agents/ENSDF-Agent.agent.md` § Bidirectional Positional Check:
+Follow the bidirectional column mapping protocol from `../../com.github.copilot/agents/ENSDF-Agent.agent.md` § Bidirectional Positional Check:
 
 1. List all header columns explicitly, including blank positions
 2. Count blank cells as positional placeholders

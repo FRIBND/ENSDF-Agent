@@ -1,5 +1,6 @@
 ---
 name: resonance-strength-scaling
+disable-model-invocation: true
 description: >
   Use this skill when scaling resonance strengths (ωγ) in ENSDF cL comment
   lines by a given factor and applying specified relative uncertainties.
@@ -9,9 +10,12 @@ description: >
 argument-hint: [REFERENCE FACTOR UNCERTAINTY_PERCENT THRESHOLD_EV UNCERTAINTY_BELOW_PERCENT]
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # Resonance Strength Scaling in ENSDF Comment Lines
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## Purpose
 
@@ -81,7 +85,7 @@ unc = scaled * rel_unc
 
 ### Step 4: Apply PDG Significant Figure Convention
 
-Per `.github/agents/ENSDF-Agent.agent.md` § ENSDF Uncertainty Notation Rules:
+Per `../../com.github.copilot/agents/ENSDF-Agent.agent.md` § ENSDF Uncertainty Notation Rules:
 - Leading digit of uncertainty 1, 2, or <35 → **2 significant figures**
 - Leading digit ≥35, or 4-9 → **1 significant figure**
 

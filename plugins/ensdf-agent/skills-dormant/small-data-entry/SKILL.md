@@ -1,5 +1,6 @@
 ---
 name: small-data-entry
+disable-model-invocation: true
 description: >
   Use this skill for one 1964Gl04 resonance table at a time, matching direct
   resonance decays to an ENSDF adopted file by Ep(lab) and validating the
@@ -7,9 +8,12 @@ description: >
 argument-hint: [SOURCE_TABLE TARGET_FILE]
 ---
 
+> Bundled relative paths are relative to this file. Plugin command paths use `<plugin-root>` as a placeholder, not an environment variable. Find the installed directory containing `plugin.json`, replace the placeholder with its absolute path, and quote/escape the full path for the shell in use before executing. The workspace remains the working directory for data files.
+
+
 # Small Data Entry
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## When
 
@@ -64,14 +68,14 @@ cG E,RI$from 1964Gl04, but not observed in later work.
 For each new or changed data record:
 
 ```powershell
-python .github/scripts/ensdf_1line_ruler.py --line "<exact 80-char line>"
+python "<plugin-root>/scripts/ensdf_1line_ruler.py" --line "<exact 80-char line>"
 ```
 
 After the block update:
 
 ```powershell
-python .github/scripts/column_calibrate.py "<target-file>"
-python .github/scripts/check_gamma_ordering.py "<target-file>"
+python "<plugin-root>/scripts/column_calibrate.py" "<target-file>"
+python "<plugin-root>/scripts/check_gamma_ordering.py" "<target-file>"
 ```
 
 For multi-row data-entry passes, also do both QA checks before closing:

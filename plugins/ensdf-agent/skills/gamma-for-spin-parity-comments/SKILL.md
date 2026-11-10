@@ -4,11 +4,14 @@ description: >
   Use this skill when writing spin (J) and parity (π) comments for nuclear levels by listing multipolarities of deexciting and feeding gamma transitions.
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # Writing Spin-Parity Comments from Gamma Transitions
 
-- ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`.
+- ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 - Gamma-ray multipolarity selection rules: `.github/docs/gamma_selection_rules.md`.
-- G-record data field notation: `.github/skills/ensdf-gamma-record-format/SKILL.md`.
+- G-record data field notation: `../ensdf-gamma-record-format/SKILL.md`.
 
 Examples of using gamma properties in `cL J$` comments to deduce Jπ:
 

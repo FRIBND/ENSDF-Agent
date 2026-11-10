@@ -117,8 +117,8 @@ def working_directory(data):
     return os.path.realpath(os.getcwd())
 
 
-def workspace_root():
-    return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+def workspace_root(cwd):
+    return os.path.realpath(os.path.abspath(cwd))
 
 
 def key_of(path, root):
@@ -415,7 +415,7 @@ def main():
     elif not isinstance(data, dict):
         deny("Hook tool input must be a JSON object or patch string.")
     root = working_directory(event)
-    state_path = os.path.join(workspace_root(), ".github", "temp", "ens_guard", "state.json")
+    state_path = os.path.join(workspace_root(root), ".github", "temp", "ens_guard", "state.json")
     state = state_load(state_path)
 
     if tool in READ_TOOLS:  # a read refreshes freshness; verify skips reads so it is not consumed

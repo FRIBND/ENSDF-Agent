@@ -1,5 +1,6 @@
 ---
 name: image-data-extraction
+disable-model-invocation: true
 description: >
   Use this skill when extracting nuclear level scheme or gamma transition data
   from images, PDF figures, or level-scheme diagrams for ENSDF entry. Handles
@@ -9,6 +10,9 @@ description: >
   source image before claiming completion.
 argument-hint: "[image or PDF file] [target ENSDF file]"
 ---
+
+> Bundled relative paths are relative to this file.
+
 
 # Image and PDF Data Extraction
 
@@ -64,15 +68,15 @@ When level energies are not explicitly provided:
 
 ### Spin-Parity Notation
 
-For full spin-parity rules, see `.github/agents/ENSDF-Agent.agent.md` and the `spin-parity` skill.
+For full spin-parity rules, see `../../com.github.copilot/agents/ENSDF-Agent.agent.md` and the `spin-parity` skill.
 
 ## Energy Ordering
 
-All level energies and gamma energies within each level must be in ascending order. See `.github/agents/ENSDF-Agent.agent.md` § Energy Ordering Requirement.
+All level energies and gamma energies within each level must be in ascending order. See `../../com.github.copilot/agents/ENSDF-Agent.agent.md` § Energy Ordering Requirement.
 
 ## Uncertainty Notation
 
-For ENSDF uncertainty field rules (2-column maximum, GT/LT markers, scientific notation), see `.github/agents/ENSDF-Agent.agent.md` § ENSDF Uncertainty Notation Rules.
+For ENSDF uncertainty field rules (2-column maximum, GT/LT markers, scientific notation), see `../../com.github.copilot/agents/ENSDF-Agent.agent.md` § ENSDF Uncertainty Notation Rules.
 
 ## Validation Checklist
 

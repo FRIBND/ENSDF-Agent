@@ -1,5 +1,6 @@
 ---
 name: nsr-update
+disable-model-invocation: true
 description: >
   Update NSR key numbers consistently across ENS content, filenames, and
   tracking docs while preserving exact case conventions and validating the
@@ -7,9 +8,12 @@ description: >
 argument-hint: "oldUpper newUpper oldMixed newMixed citation"
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # NSR update consistency
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## Task
 

@@ -10,9 +10,12 @@ description: >
 argument-hint: "[crosscheck comment quoted values]"
 ---
 
+> Bundled relative paths are relative to this file. Plugin command paths use `<plugin-root>` as a placeholder, not an environment variable. Find the installed directory containing `plugin.json`, replace the placeholder with its absolute path, and quote/escape the full path for the shell in use before executing. The workspace remains the working directory for data files.
+
+
 # Comment Quoted Values Cross-Check
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## Purpose
 
@@ -28,7 +31,7 @@ Cross-check all quoted values in `cL J$` comments against corresponding L-record
 
 ## ENSDF Record Reference
 
-Be sure to follow the **Integral Understanding of Continuation Records and Comments (Column 6)** specified in `.github/agents/ENSDF-Agent.agent.md`.
+Be sure to follow the **Integral Understanding of Continuation Records and Comments (Column 6)** specified in `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ### L-Record Fields Used
 
@@ -62,7 +65,7 @@ Quoted gamma energy must match G-record energy character-for-character.
 
 Quoted multipolarity must match the G-record M field character-for-character.
 - **Pattern:** `energy|g MULT` (e.g., `1824.7|g M1+E2`)
-- **Equivalence:** a measured `D`/`Q`/`D+Q`/`D(+Q)` form and the electromagnetic character derived from it describe the same transition, so quoting the measured form for a record whose M field holds the character form is accepted, e.g. `D, |DJ=1` quoted for an `(E1)` record. The character derived from the level scheme must not be quoted back as evidence for that same level's Jπ (circular); see `.github/skills/gamma-selection-rules/SKILL.md`.
+- **Equivalence:** a measured `D`/`Q`/`D+Q`/`D(+Q)` form and the electromagnetic character derived from it describe the same transition, so quoting the measured form for a record whose M field holds the character form is accepted, e.g. `D, |DJ=1` quoted for an `(E1)` record. The character derived from the level scheme must not be quoted back as evidence for that same level's Jπ (circular); see `../gamma-selection-rules/SKILL.md`.
 - **Zero tolerance** on multipole order — quoted `D` against an `M1+E2` record, or quoted `E2` against a `D` record, is a mismatch
 
 ### 3. Level Energy
@@ -126,7 +129,7 @@ For transitions quoted as `E_gamma|g to/from E_level`, verify:
 ### Step 1: Run Detection
 
 ```bash
-python .github/scripts/check_quoted_values.py "path/to/adopted.ens"
+python "<plugin-root>/scripts/check_quoted_values.py" "path/to/adopted.ens"
 ```
 
 Optional flags: `--tolerance N` (default 1.0 keV search window), `--debug` (verbose diagnostics)
@@ -153,7 +156,7 @@ Fix ONLY comment text (`cL`, `2cL`, `3cL` lines) using `replace_string_in_file`.
 ### Step 4: Re-verify
 
 ```bash
-python .github/scripts/check_quoted_values.py "path/to/adopted.ens"
+python "<plugin-root>/scripts/check_quoted_values.py" "path/to/adopted.ens"
 ```
 Confirm zero errors.
 

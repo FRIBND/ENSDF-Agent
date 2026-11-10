@@ -5,9 +5,12 @@ description: >
 argument-hint: "[ENSDF file path]"
 ---
 
+> Bundled relative paths are relative to this file. Plugin command paths use `<plugin-root>` as a placeholder, not an environment variable. Find the installed directory containing `plugin.json`, replace the placeholder with its absolute path, and quote/escape the full path for the shell in use before executing. The workspace remains the working directory for data files.
+
+
 # Sync cL T$ Lifetime to L-Record T/DT Fields
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## Recommended Operating Procedure
 
@@ -26,7 +29,7 @@ ENSDF 80-column data record and field definitions, structural rules, column posi
 - Symmetric uncertainty: `DT{-1/2}=D|t|*ln(2)`.
 - Asymmetric uncertainty: Min and max are converted separately and then combined.
 - Limits preserve direction: `|t>...` -> `T>...`, `|t<...` -> `T<...`.
-- Follow uncertainty-in-last-digits notation. See `.github/agents/ENSDF-Agent.agent.md` § ENSDF Uncertainty Notation Rules.
+- Follow uncertainty-in-last-digits notation. See `../../com.github.copilot/agents/ENSDF-Agent.agent.md` § ENSDF Uncertainty Notation Rules.
 - Round the T value and DT uncertainty together so DT is a valid 1- or 2-digit.
 - Example: `|t=649 fs {I190}` → `T{-1/2}=0.45 PS`, `DT=13`.
 - Choose a natural T-field unit by scaling between `FS`, `PS`, `NS`, `US`, etc. so the stored final value is not `>100` or `<0.1`; if the converted value is `>100` or `<0.1`, scale up or down to the nearest appropriate unit.
@@ -39,10 +42,10 @@ ENSDF 80-column data record and field definitions, structural rules, column posi
 ## Validation
 
 - Run a reproducible random spot-check focused on transformation correctness (`|t` -> `T{-1/2}`, decoded uncertainty -> `DT`).
-- After each edit: `python .github/scripts/ensdf_1line_ruler.py --line "<exact 80-char line>"`
+- After each edit: `python "<plugin-root>/scripts/ensdf_1line_ruler.py" --line "<exact 80-char line>"`
 - After all edits:
-  - `python .github/scripts/column_calibrate.py "file.ens"`
-  - `python .github/scripts/check_gamma_ordering.py "file.ens"`
+  - `python "<plugin-root>/scripts/column_calibrate.py" "file.ens"`
+  - `python "<plugin-root>/scripts/check_gamma_ordering.py" "file.ens"`
 
 ## Audit Addendum (Recommended)
 
@@ -50,4 +53,4 @@ ENSDF 80-column data record and field definitions, structural rules, column posi
 - Audit every T-bearing L record, not only those with numeric `|t`: a range statement (e.g. `too short to be measured, range 1-100 ps`) must carry its implied limit (`|t<1 ps`) so the `T` limit is traceable.
 - Keep the unit convention already used by the file/mass chain (e.g. `0.055 PS`, `0.021 PS`) instead of re-scaling sub-0.1 values to `FS`; do not churn `T`/`DT` that already reproduce `|t`*ln(2).
 - For comments containing `weighted average of` or `unweighted average of`, verify the adopted lifetime using:
-  - `python .github/scripts/Java_Average.py --comment "<full cL T block text>"`
+  - `python "<plugin-root>/scripts/Java_Average.py" --comment "<full cL T block text>"`

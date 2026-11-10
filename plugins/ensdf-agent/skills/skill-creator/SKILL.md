@@ -3,6 +3,9 @@ name: skill-creator
 description: "Creates and revises SKILL.md files for VS Code GitHub Copilot and Claude agent skills. Use when authoring a new SKILL.md, improving an existing one, diagnosing why a skill is not triggering, or packaging domain knowledge into a reusable workflow skill. Not for creating .instructions.md, .prompt.md, .agent.md, hooks, or other customization file types."
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # Skill Creator
 
 ## Scope
@@ -15,7 +18,7 @@ For other customization file types (.instructions.md, .prompt.md, .agent.md, hoo
 
 ## Project Rule: Reference, Don't Repeat
 
-> **If a rule, standard, or convention already exists in `.github/copilot-instructions.md` or `.github/agents/ENSDF-Agent.agent.md`, reference the relevant section — do NOT copy or paraphrase it into SKILL.md.**
+> **If a rule, standard, or convention already exists in `../../com.github.copilot/agents/ENSDF-Agent.agent.md` or `../../com.github.copilot/agents/ENSDF-Agent.agent.md`, reference the relevant section — do NOT copy or paraphrase it into SKILL.md.**
 
 ---
 
@@ -26,7 +29,7 @@ For other customization file types (.instructions.md, .prompt.md, .agent.md, hoo
 SKILL.md shares the context window with conversation history, system prompts, and all loaded skills.
 
 - `Does Claude already know this?` → Remove it.
-- `Is this already in `.github/copilot-instructions.md` or `.github/agents/ENSDF-Agent.agent.md`?` → Reference it.
+- `Is this already in `../../com.github.copilot/agents/ENSDF-Agent.agent.md` or `../../com.github.copilot/agents/ENSDF-Agent.agent.md`?` → Reference it.
 - Body under 90 lines.
 
 ### 2. Set Appropriate Freedom

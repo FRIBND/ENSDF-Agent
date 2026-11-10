@@ -1,5 +1,6 @@
 ---
 name: comment-cleanup
+disable-model-invocation: true
 description: >
   Use this skill when reviewing, writing, or reordering comments for an ENSDF
   dataset. Establishes a single default-source general cG E,RI$ comment and adds
@@ -9,9 +10,12 @@ description: >
 argument-hint: [ENSDF file or dataset name]
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # ENSDF Comment Cleanup Instructions
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## General cG E,RI Comment Strategy
 
@@ -31,7 +35,7 @@ ENSDF 80-column data record and field definitions, structural rules, column posi
 | E or RI from default dataset only | No individual comment needed |
 | E|g without uncertainty | No comment needed (deduced from level difference) |
 | Weighted/unweighted average from multiple datasets | Add cG E$ or cG RI$ with average details |
-| Intensities normalized to different references | Rescale to one reference, adopt its RI/DRI, move others to `RI$other` → `.github/skills/rescale-gamma-ri/SKILL.md` |
+| Intensities normalized to different references | Rescale to one reference, adopt its RI/DRI, move others to `RI$other` → `../../skills/rescale-gamma-ri/SKILL.md` |
 | Value from non-default dataset | Add cG E$ or cG RI$ stating source |
 | Other values exist but not used for averaging | Add `other: VALUE from DATASET` |
 | M or MR without a stated basis | Add `cG M$`/`cG M,MR$` with the measured basis (γ(θ), γγ(θ), ADO) after confirming it in the raw `.mrg` G-record comments; cite the RUL clause only when the adopted M field is firm — a tentative field (`D(+Q)`, `M1(+E2)`, `(M1+E2)`) leaves Q open, so M2 is never RUL ruled out |
@@ -39,14 +43,14 @@ ENSDF 80-column data record and field definitions, structural rules, column posi
 
 ### Comment Ordering
 
-Order comment units in each `cL`/`cG` block per `.github/agents/ENSDF-Agent.agent.md`
+Order comment units in each `cL`/`cG` block per `../../com.github.copilot/agents/ENSDF-Agent.agent.md`
 (general comment last). Move whole units (first line plus continuations) unchanged — no
 text edits, no renumbering, no data-record changes. Swapping two adjacent units exchanges
 their padding because their text lengths differ: replace both whole lines and recompute
 trailing spaces so each stays exactly 80 characters, changing padding only (content bytes
 must be identical to the pre-edit lines). Within one `cG M,MR$` unit, list
 measured bases before the level-scheme/RUL clause, and keep each per-gamma identifier
-scoped to the fields its source supplies. Validate with `.github/scripts/`:
+scoped to the fields its source supplies. Validate with `../../scripts`:
 `ensdf_1line_ruler.py`, `check_gamma_ordering.py`, `column_calibrate.py`; re-check that
 every line stays exactly 80 characters after each edit — editor tooling can strip padding.
 Reload the file before extending a dataset general-comment block: a human may have
@@ -69,7 +73,7 @@ their wording and re-wrap the whole paragraph instead of re-padding the single l
     - From multiple datasets → add weighted/unweighted average comment
     - From non-default dataset → add source comment, with `Other:` values when applicable
 3. Remove redundant individual comments that merely restate the default source.
-4. Order each level/gamma comment block per `.github/agents/ENSDF-Agent.agent.md`,
+4. Order each level/gamma comment block per `../../com.github.copilot/agents/ENSDF-Agent.agent.md`,
     moving whole units (first line + continuations).
 5. Keep deduced E|g values (no uncertainty) undocumented at per-gamma level unless an explicit exception is required.
 6. For each M/MR assignment, confirm the basis against the raw `.mrg` G-record comments and cite that same source, named by its reaction (e.g. `in {+24}Mg({+16}O,|a2p|g)`) so the basis stays traceable.
@@ -87,5 +91,5 @@ their wording and re-wrap the whole paragraph instead of re-padding the single l
 - Comment units in every `cL`/`cG` block follow ENSDF order, general comment last.
 
 For general comment ordering at the beginning of Adopted files, see
-`.github/skills/general-comments-ordering/SKILL.md`. Full record/column rules:
-`.github/agents/ENSDF-Agent.agent.md`.
+`../../skills/general-comments-ordering/SKILL.md`. Full record/column rules:
+`../../com.github.copilot/agents/ENSDF-Agent.agent.md`.

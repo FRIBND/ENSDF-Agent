@@ -3,9 +3,12 @@ name: split-adopted-levels
 description: Splits one adopted ENSDF L-record that wrongly groups two or more datasets' distinct levels.
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # Split Adopted Levels
 
-ENSDF 80-column record/field definitions, structural rules, column positions, uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column record/field definitions, structural rules, column positions, uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 *Fill in:* adopted file; dataset letters and source files; the shared L-record.
 1. Read each cited dataset; tabulate its E, DE, Jπ, T, DT, L, S, DS, G-records, continuations, comments; confirm the levels are distinct. Grepping each source for the energy is decisive: a dataset lacking that level owns nothing there and must not keep its `(energy)`/`(*)` label.
 2. Map ownership of every field, continuation and comment to the dataset that supplies it (often part of the MRG file attached by user); a field no dataset reported stays blank. This includes adopted E/DE: it must trace to an owning dataset, never to the previous evaluation's value.
@@ -14,4 +17,4 @@ ENSDF 80-column record/field definitions, structural rules, column positions, un
 5. Re-label every sibling that shared the old label, not just the record being split.
 6. Validate each edited line, then column calibration and gamma ordering; edit in place, never scripts.
 
-Inverse: `.github/skills/group-adopted-levels/SKILL.md`.
+Inverse: `../merge-adopted-levels/SKILL.md`.

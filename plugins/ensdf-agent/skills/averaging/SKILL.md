@@ -9,20 +9,23 @@ description: >
 argument-hint: "[VALUE1 UNC1 VALUE2 UNC2 ...]"
 ---
 
+> Bundled relative paths are relative to this file. Plugin command paths use `<plugin-root>` as a placeholder, not an environment variable. Find the installed directory containing `plugin.json`, replace the placeholder with its absolute path, and quote/escape the full path for the shell in use before executing. The workspace remains the working directory for data files.
+
+
 # ENSDF Averaging
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## How
 
 **Numeric mode** — comma after each pair for readability (optional):
 ```bash
-python .github/scripts/Java_Average.py 19.7 1.3, 22 4, 21.5 1.5
+python "<plugin-root>/scripts/Java_Average.py" 19.7 1.3, 22 4, 21.5 1.5
 ```
 
 **Comment mode** — feed the existing cL T$ comment directly:
 ```bash
-python .github/scripts/Java_Average.py --comment "19.7 ps {I13} (1970Br10) and 22 ps {I4} (1975Sm02)"
+python "<plugin-root>/scripts/Java_Average.py" --comment "19.7 ps {I13} (1970Br10) and 22 ps {I4} (1975Sm02)"
 ```
 
 ## What to adopt

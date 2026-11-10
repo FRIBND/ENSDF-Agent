@@ -3,9 +3,12 @@ name: data-reconciliation
 description: "Reconciles source data into a target ENS file by replacing, keeping, adding, merging, or averaging data records and fields. Use when synchronizing ENS files with source CSV, Markdown, MRG, ADP, or raw ENS data, or when updating energies, intensities, and comments while preserving selected target values."
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # Reconciling ENSDF Data
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## Task Customization & Configuration
 
@@ -34,7 +37,7 @@ ENSDF 80-column data record and field definitions, structural rules, column posi
 - **Add/Insert** `[field]` from source (e.g., new G-records absent in target)
 - **Merge/Combine** `[field]` from both (e.g., cG RI$ comments quoting both)
 - **Average** `[field]` across sources (e.g., weighted average of RI)
-- **Rescale** `[field]` onto a common normalization reference → `.github/skills/rescale-gamma-ri/SKILL.md`
+- **Rescale** `[field]` onto a common normalization reference → `../rescale-gamma-ri/SKILL.md`
 
 ### Special Handling
 
@@ -61,7 +64,7 @@ Resolve any ambiguity in one focused question. Do not proceed with an incomplete
 
 ### Step 2 — Parse Source Data
 
-Read source file and extract the fields specified in Task Configuration. For tabular sources, build an explicit column map (all columns including blanks) and verify bidirectionally. See `.github/agents/ENSDF-Agent.agent.md` § Bidirectional Positional Check for blank-cell counting rules.
+Read source file and extract the fields specified in Task Configuration. For tabular sources, build an explicit column map (all columns including blanks) and verify bidirectionally. See `../../com.github.copilot/agents/ENSDF-Agent.agent.md` § Bidirectional Positional Check for blank-cell counting rules.
 
 ### Step 3 — Capture Target Fields to Keep
 

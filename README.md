@@ -29,7 +29,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Plugin Package
 
-The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, active portable skills live under `skills/`, and VS Code-specific agents, commands, and hooks live under `com.github.copilot/`. The 14 low-frequency skills sourced from `.github/skills-dormant/` are packaged as explicit slash commands, not added to the automatically discovered skill catalog.
+The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, active portable skills live under `skills/`, and VS Code-specific agents and hooks live under `com.github.copilot/`. Low-frequency skills are mirrored under `skills-dormant/` as skills, not converted to commands. That directory is outside the standard `skills/` discovery location, so clients are not required to discover or invoke them.
 
 ## Development Timeline
 
@@ -50,7 +50,6 @@ The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/r
 
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
 - Windows users: Python must be invokable as `python` from terminal.
-- Use the plugin from an ENSDF workspace: several workflows expect workspace files under `.github/agents/`, `.github/copilot-instructions.md`, `.github/scripts/`, and `.github/skills/`. Installing the plugin does not add those files to another workspace.
 
 
 ## Troubleshooting

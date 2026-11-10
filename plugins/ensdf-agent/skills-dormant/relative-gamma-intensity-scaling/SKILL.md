@@ -1,5 +1,6 @@
 ---
 name: relative-gamma-intensity-scaling
+disable-model-invocation: true
 description: >
   Use this skill to scale relative intensity comments in ENSDF datasets by
   normalizing the strongest line to 100, then append the scaled RI values with
@@ -7,9 +8,12 @@ description: >
 argument-hint: "[SOURCE_CITATION NORMALIZATION_ENERGY]"
 ---
 
+> Bundled relative paths are relative to this file.
+
+
 # Relative gamma-intensity scaling
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
 
 ## Principle
 

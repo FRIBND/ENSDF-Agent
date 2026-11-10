@@ -29,7 +29,9 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Plugin Package
 
-The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, active portable skills live under `skills/`, and VS Code-specific agents, commands, and hooks live under `com.github.copilot/`. The 14 low-frequency skills sourced from `.github/skills-dormant/` are packaged as explicit slash commands, not added to the automatically discovered skill catalog.
+The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, active portable skills live under `skills/`, and VS Code-specific agents and hooks live under `com.github.copilot/`. Low-frequency skills are mirrored under `skills-dormant/` as skills, not converted to commands. That directory is outside the standard `skills/` discovery location, so clients are not required to discover or invoke them.
+
+The sync script rewrites bundled document references relative to their containing file. Command examples use `<plugin-root>` as an explicit placeholder: replace it with the installed directory containing `plugin.json` and quote or escape the full path for the shell. Do not assume plugin variables are available in an interactive terminal; the specification's guaranteed `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` expansion applies to specified MCP configuration fields, not arbitrary skill text. VS Code additionally documents `${PLUGIN_ROOT}` for plugin hook commands.
 
 ## Development Timeline
 
@@ -50,12 +52,14 @@ The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/r
 
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
 - Windows users: Python must be invokable as `python` from terminal.
-- Use the plugin from an ENSDF workspace: several workflows expect workspace files under `.github/agents/`, `.github/copilot-instructions.md`, `.github/scripts/`, and `.github/skills/`. Installing the plugin does not add those files to another workspace.
+- Use the plugin from an ENSDF workspace. Hook state is stored under the workspace's `.github/temp/`; installing the plugin does not add its source files to the workspace.
+- Some source scripts contain machine-specific paths or additional dependencies. In particular, the current `ens2pdf.py` does not support the dormant skill's command-line examples; configure or update that source script before use.
 
 
 ## Troubleshooting
-
+See [VS Code's agent troubleshooting guide](https://code.visualstudio.com/docs/agents/agent-troubleshooting/troubleshooting).
 See [VS Code's plugin troubleshooting guide](https://code.visualstudio.com/docs/agent-customization/agent-plugins#_troubleshooting).
+See [VS Code's AI settings reference](https://code.visualstudio.com/docs/agents/reference/ai-settings).
 
 ## Hooks
 
@@ -70,11 +74,10 @@ All hooks are scoped to **ENSDF-Agent** in its agent frontmatter and run only wh
 
 
 ## Caveats
-- Since March 2026, the VS Code team has been prioritizing excessively frequent updates to AI features at the expense of the stability and reliability of the development environment, leading to mounting frustration among users. The usability of **ENSDF-Agent** could be negatively impacted by these updates. The FRIB Nuclear Data Group is actively monitoring the VS Code updates and is committed to providing timely fixes to ensure the usability of **ENSDF-Agent**.
-- VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the plugin's sync tooling merges its content into `com.github.copilot/agents/ENSDF-Agent.agent.md` instead.
-- Agent Skills performance and reliability vary based on the underlying LLM capabilities.
-
-- VS Code extension-contributed agents and skills will negatively impact the user experience of **ENSDF-Agent**. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the chat menu. Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable: Click the Gear icon (Manage) directly on the extension list item. Select Disable (Workspace) from the dropdown menu.
+- Since March 2026, the VS Code team has been prioritizing excessively frequent updates to AI features at the expense of the stability and reliability of the development environment, leading to mounting frustration among users. The VS Code documentation and release notes are increasingly verbose, vague, and self-contradictory. The usability of **ENSDF-Agent** could be negatively impacted by some over-engineered updates. The FRIB Nuclear Data Group is actively monitoring the VS Code updates and is committed to providing timely fixes to ensure the usability of **ENSDF-Agent**.
+- Plugin-provided agent-scoped hooks require runtime verification in the target VS Code/Copilot session; the plugin specification does not guarantee placeholder expansion for agent frontmatter or arbitrary shell commands.
+- VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the content is merged into `com.github.copilot/agents/ENSDF-Agent.agent.md` instead.
+- VS Code extension-contributed agents and skills will negatively impact the user experience of **ENSDF-Agent**. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the Customization menu. Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable: Click the Gear icon (Manage) directly on the extension list item. Select Disable (Workspace) from the dropdown menu.
 
 ## Disclaimer and Usage Notice
 

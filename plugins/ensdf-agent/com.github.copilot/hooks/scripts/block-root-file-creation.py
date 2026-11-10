@@ -121,8 +121,8 @@ def working_directory(hook_input):
     return os.path.realpath(os.getcwd())
 
 
-def workspace_root():
-    return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+def workspace_root(cwd):
+    return os.path.realpath(os.path.abspath(cwd))
 
 
 def unquote_token(token):
@@ -331,8 +331,8 @@ def main():
     if not target_paths:
         sys.exit(0)
 
-    root = workspace_root()
     cwd = working_directory(hook_input)
+    root = workspace_root(cwd)
 
     for file_path, operation in target_paths:
         if not file_path:
