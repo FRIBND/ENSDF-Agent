@@ -8,7 +8,7 @@ Open-source release: [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/E
 
 ## Installation
 
-Install from the Git repository:
+Install from the source:
 
 1. Open the VS Code Command Palette:
    - Windows/Linux: `Ctrl + Shift + P`
@@ -16,11 +16,9 @@ Install from the Git repository:
 2. Type **Chat: Install Plugin from Source** and press Enter.
 3. Enter `FRIBND/ENSDF-Agent` and press Enter.
 
-The plugin manifest is at the repository root, which **Chat: Install Plugin from Source** requires.
+Occasionally, VS Code displays an error message `Failed to install plugin` without a clear reason.
 
-Sometimes, it shows `Failed to install plugin` for no reason or for an ambiguous reason.
-
-Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace).
+Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace) to install the plugin from the Git repository.
 
 Open **Preferences: Open User Settings (JSON)** in VS Code and copy the desired json commands from `C:\Users\<YourUsername>\.copilot\installed-plugins\ensdf-agent\ensdf-agent\vscode-settings.json` shipped with the plugin.
 
@@ -36,8 +34,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 | Path | Contents |
 |------|----------|
-| `plugin.json` | Plugin metadata |
-| `.plugin/plugin.json` | Compatibility copy of plugin metadata |
+| `plugin.json` | Plugin manifest and metadata |
 | `com.github.copilot/agents/` | ENSDF-Agent definition |
 | `com.github.copilot/hooks/scripts/` | Hook scripts used by ENSDF-Agent |
 | `scripts/` | ENSDF processing and validation scripts |

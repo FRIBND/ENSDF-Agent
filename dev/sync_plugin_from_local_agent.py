@@ -5,9 +5,8 @@ workspace (default source: D:/X/ND/ENSDF/.github).
 Run from the repository root with: python dev/sync_plugin_from_local_agent.py
 
 The plugin root is the repository root because VS Code's "Install Plugin from
-Source" only looks for a manifest at the repository root (plugin.json or
-.plugin/plugin.json). Keeping the payload at the root also keeps bundled paths
-resolvable after installation.
+Source" only looks for a manifest at the repository root. Keeping the payload at
+the root also keeps bundled paths resolvable after installation.
 
 Run order, see main():
     1. bump_versions()     - bump manifests and return canonical version.
@@ -17,9 +16,9 @@ Run order, see main():
     3. sync()              - mirror skills/, skills-dormant/, scripts/, and
                              hooks/scripts/, adapting bundled references.
 
-plugin.json is plugin-owned; .plugin/plugin.json is a compatibility copy kept
-identical for clients that only probe that location. Agent and hook outputs are
-generated in the Agent Plugins 1.0 Copilot namespace.
+plugin.json is plugin-owned and is the only manifest; any stale .plugin/
+compatibility copy is removed. Agent and hook outputs are generated in the Agent
+Plugins 1.0 Copilot namespace.
 """
 
 from __future__ import annotations
@@ -61,7 +60,6 @@ excluded_segments = {
 # before bumping, then the new version is written to every file in this list.
 version_files = [
     Path("plugin.json"),  # canonical source
-    Path(".plugin/plugin.json"),  # legacy OpenPlugin compatibility copy
     Path(".github/plugin/marketplace.json"),
 ]
 
@@ -270,25 +268,20 @@ def bump_versions(repo_root: Path, bump: str, dry_run: bool) -> str:
     return new
 
 
-def sync_compat_manifest(plugin_root: Path, dry_run: bool, planned_version: str | None = None) -> None:
-    """Mirror the canonical manifest for clients that look in .plugin."""
-    source = plugin_root / "plugin.json"
-    target = plugin_root / ".plugin" / "plugin.json"
-    content = source.read_bytes()
-    if planned_version is not None:
-        content = re.sub(
-            rb'"version"\s*:\s*"[^"]*"',
-            f'"version": "{planned_version}"'.encode("ascii"),
-            content,
-        )
-    if target.is_file() and target.read_bytes() == content:
-        print("SKIP   .plugin/plugin.json")
-    elif dry_run:
-        print("COPY   .plugin/plugin.json")
-    else:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
-        print("COPIED .plugin/plugin.json")
+def remove_compat_manifest(plugin_root: Path, dry_run: bool) -> None:
+    """Delete a redundant .plugin/plugin.json copy; the root manifest suffices."""
+    legacy = plugin_root / ".plugin" / "plugin.json"
+    if not legacy.is_file():
+        return
+    if dry_run:
+        print("REMOVE .plugin/plugin.json (redundant; root plugin.json is the manifest)")
+        return
+    legacy.unlink()
+    try:
+        legacy.parent.rmdir()
+    except OSError:
+        pass
+    print("REMOVED .plugin/plugin.json (redundant; root plugin.json is the manifest)")
 
 
 def default_vscode_settings_path() -> Path:
@@ -819,7 +812,10 @@ def sync_readme(repo_root: Path, plugin_root: Path, dry_run: bool) -> None:
         print("COPIED README.md")
 
 
-def rewrite_plugin_hook_path(command: str) -> str:
+SCRIPT_SUFFIXES = (".py", ".js", ".cjs", ".mjs", ".sh", ".ps1", ".bat", ".cmd", ".exe")
+
+
+def rewrite_plugin_hook_path(command: str, known_scripts: frozenset[str] = frozenset()) -> str:
     """Rewrite bundled script paths in a shell command, preserving its arguments."""
     source_path = re.compile(
         r"(?P<quoted>['\"])(?P<quoted_path>(?:\./)?\.github[\\/]+hooks[\\/]+.*?)(?P=quoted)"
@@ -827,7 +823,10 @@ def rewrite_plugin_hook_path(command: str) -> str:
     )
 
     def replace(match: re.Match[str]) -> str:
-        path = match.group("quoted_path") or match.group("bare")
+        bare = match.group("bare")
+        if bare:
+            _reject_ambiguous_bare_path(match.string, match.end(), bare, known_scripts)
+        path = match.group("quoted_path") or bare
         path = path.replace("\\", "/")
         if path.startswith("./"):
             path = path[2:]
@@ -835,6 +834,42 @@ def rewrite_plugin_hook_path(command: str) -> str:
         return f'"{rewritten}"'
 
     return source_path.sub(replace, command)
+
+
+def _reject_ambiguous_bare_path(
+    source: str,
+    end: int,
+    matched: str,
+    known_scripts: frozenset[str],
+) -> None:
+    """Reject unquoted paths whose spaces make the token boundary ambiguous.
+
+    ``.github/hooks/scripts/a b.py`` and ``.github/hooks/scripts/a\\ b.py``
+    cannot be quoted safely after the fact, so fail instead of publishing a
+    command that points at a truncated path. A bare path that names a real
+    bundled script is unambiguous even without an extension.
+    """
+    tail = source[end:]
+    segment = re.split(r"[;&|<>]", tail, maxsplit=1)[0]
+    if matched.endswith("\\"):
+        raise ValueError(
+            "Unquoted hook script path contains an escaped space in the source agent and "
+            f"cannot be rewritten safely; quote the path in the source file. Source: {source!r}"
+        )
+    if matched.lower().endswith(SCRIPT_SUFFIXES):
+        return
+    if matched.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] in known_scripts:
+        return
+    remainder = [
+        token for token in re.findall(r"[^\s\"']+", segment)
+        if token and not token.startswith("-")
+    ]
+    if not any(token.lower().endswith(SCRIPT_SUFFIXES) for token in remainder):
+        return
+    raise ValueError(
+        "Unquoted hook script path contains a space in the source agent and cannot be "
+        f"rewritten safely; quote the path in the source file. Source: {source!r}"
+    )
 
 
 def rewrite_plugin_hook_executable(executable: str) -> str:
@@ -899,7 +934,11 @@ def _decode_hook_string_scalar(value: str) -> tuple[str, str] | None:
     return stripped[:comment_at].rstrip(), stripped[comment_at:] + trailing
 
 
-def _rewrite_hook_command_line(line: str, field_indent: int) -> tuple[str, bool]:
+def _rewrite_hook_command_line(
+    line: str,
+    field_indent: int,
+    known_scripts: frozenset[str] = frozenset(),
+) -> tuple[str, bool]:
     """Rewrite one hook executable field; report whether it starts a block scalar."""
     match = re.match(
         r"^(?P<indent>[ \t]*)(?P<key>command|exec|cwd|bash|powershell|windows|linux|osx):"
@@ -923,7 +962,7 @@ def _rewrite_hook_command_line(line: str, field_indent: int) -> tuple[str, bool]
     if key in {"exec", "cwd"}:
         rewritten = rewrite_plugin_hook_executable(value)
     else:
-        rewritten = rewrite_plugin_hook_path(value)
+        rewritten = rewrite_plugin_hook_path(value, known_scripts)
     if rewritten == value:
         return line, False
 
@@ -934,7 +973,10 @@ def _rewrite_hook_command_line(line: str, field_indent: int) -> tuple[str, bool]
     )
 
 
-def rewrite_agent_hook_block(agent_text: str) -> str:
+def rewrite_agent_hook_block(
+    agent_text: str,
+    known_scripts: frozenset[str] = frozenset(),
+) -> str:
     """Rewrite bundled paths in an agent's hooks without moving or reformatting them."""
     lines = agent_text.splitlines(keepends=True)
     if not lines or lines[0].strip() != "---":
@@ -1050,6 +1092,7 @@ def rewrite_agent_hook_block(agent_text: str) -> str:
             rewritten, is_block = _rewrite_hook_command_line(
                 lines[index],
                 current_field_indent,
+                known_scripts,
             )
             lines[index] = rewritten
             if is_block:
@@ -1070,7 +1113,7 @@ def rewrite_agent_hook_block(agent_text: str) -> str:
                     if field_key in {"exec", "cwd"}:
                         rewritten_command = rewrite_plugin_hook_executable(command)
                     else:
-                        rewritten_command = rewrite_plugin_hook_path(command)
+                        rewritten_command = rewrite_plugin_hook_path(command, known_scripts)
                     if rewritten_command != command:
                         lines[block_index] = content + rewritten_command + newline
                     block_index += 1
@@ -1151,9 +1194,23 @@ def inject_agent_version(agent_text: str, version: str) -> str:
     return "".join(["---\n", *new_frontmatter, remainder])
 
 
+def hook_script_names(source_root: Path) -> frozenset[str]:
+    """Names of bundled hook scripts, used to disambiguate unquoted paths."""
+    scripts = source_root / "hooks" / "scripts"
+    if not scripts.is_dir():
+        return frozenset()
+    names = set()
+    for path in scripts.rglob("*"):
+        if path.is_file():
+            names.add(path.name)
+            names.add(path.relative_to(scripts).as_posix())
+    return frozenset(names)
+
+
 def build_merged_agent_content(
     agent_text: str,
     instructions_text: str,
+    known_scripts: frozenset[str] = frozenset(),
 ) -> str:
     """Build the full plugin agent-file content from current source content.
 
@@ -1171,7 +1228,7 @@ def build_merged_agent_content(
     If instructions_text is empty (e.g. the source file was deleted), the
     appended section is simply omitted.
     """
-    rewritten_agent = rewrite_agent_hook_block(agent_text)
+    rewritten_agent = rewrite_agent_hook_block(agent_text, known_scripts)
     if _agent_hook_record_count(agent_text) != _agent_hook_record_count(rewritten_agent):
         raise ValueError("Rewriting hook paths changed the agent's hook entry count")
     rewritten_agent = rewritten_agent.rstrip("\n")
@@ -1229,6 +1286,7 @@ def sync_agent_file(
     merged = build_merged_agent_content(
         agent_text,
         instructions_text,
+        hook_script_names(source_root),
     )
 
     remove_plugin_wide_hook_config(plugin_root, dry_run)
@@ -1439,8 +1497,12 @@ def main() -> int:
         (source_root / "agents" / "ENSDF-Agent.agent.md").read_text(encoding="utf-8"),
         (source_root / "copilot-instructions.md").read_text(encoding="utf-8")
         if (source_root / "copilot-instructions.md").is_file() else "",
+        hook_script_names(source_root),
     )
     validate_portable_text(agent_content, Path("com.github.copilot/agents/ENSDF-Agent.agent.md"))
+    # Preflight manifests before anything is deleted or rewritten.
+    manifest = preflight_manifests(plugin_root)
+    validate_marketplace(plugin_root, manifest)
     dependencies = workspace_dependencies(source_root)
     if dependencies:
         print(
@@ -1450,17 +1512,11 @@ def main() -> int:
         for dependency in dependencies:
             print(f"  {dependency}")
         print()
-    # Create the compatibility manifest first: version bumping requires it.
-    sync_compat_manifest(plugin_root, args.dry_run)
-    planned_version = None
+    remove_compat_manifest(plugin_root, args.dry_run)
     if not args.no_bump:
-        new_version = bump_versions(repo_root, args.bump, args.dry_run)
-        if args.dry_run:
-            planned_version = new_version
+        bump_versions(repo_root, args.bump, args.dry_run)
     else:
         get_canonical_version(repo_root)
-    if planned_version is not None:
-        sync_compat_manifest(plugin_root, args.dry_run, planned_version)
     if settings_content is not None:
         sync_vscode_settings(plugin_root, settings_content, args.dry_run)
     sync_agent_file(source_root, plugin_root, args.dry_run)
@@ -1470,25 +1526,59 @@ def main() -> int:
     return result
 
 
+def preflight_manifests(plugin_root: Path) -> dict[str, object]:
+    """Confirm the installer-visible manifest is usable before sync deletes anything."""
+    canonical = plugin_root / "plugin.json"
+    if not canonical.is_file():
+        raise FileNotFoundError(f"Plugin manifest missing from repository root: {canonical}")
+    text = canonical.read_text(encoding="utf-8")
+    manifest = json.loads(text)
+    version = manifest.get("version")
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError(f"plugin.json version must be X.Y.Z for version bumping: {version!r}")
+    first_version = re.search(r'"version"\s*:\s*"([^"]*)"', text)
+    if not first_version or first_version.group(1) != version:
+        raise ValueError("plugin.json root version must be the first plain version literal")
+    return manifest
+
+
 def validate_manifest_locations(plugin_root: Path) -> None:
-    """Fail loudly if the manifests the installer probes are missing or differ.
+    """Fail loudly if the installer-visible manifest is missing.
 
     VS Code's "Install Plugin from Source" looks for a manifest at the
     repository root, so a payload placed in a subdirectory is not installable.
     """
     canonical = plugin_root / "plugin.json"
-    compatibility = plugin_root / ".plugin" / "plugin.json"
     if not canonical.is_file():
         raise FileNotFoundError(f"Plugin manifest missing from repository root: {canonical}")
-    if not compatibility.is_file():
-        raise FileNotFoundError(f"Compatibility manifest missing: {compatibility}")
-    if canonical.read_bytes() != compatibility.read_bytes():
-        raise ValueError("plugin.json and .plugin/plugin.json differ; run sync to align them")
+    if (plugin_root / ".plugin" / "plugin.json").exists():
+        raise ValueError("Redundant .plugin/plugin.json found; the root plugin.json is the manifest")
     manifest = json.loads(canonical.read_text(encoding="utf-8"))
     for entry in ("skills", "com.github.copilot"):
         if not (plugin_root / entry).is_dir():
             raise FileNotFoundError(f"Plugin component missing next to plugin.json: {entry}")
-    print(f"Manifest check: plugin.json ({manifest.get('version')}) with .plugin copy and components present")
+    validate_marketplace(plugin_root, manifest)
+    print(f"Manifest check: plugin.json ({manifest.get('version')}) present with components")
+
+
+def validate_marketplace(plugin_root: Path, manifest: dict[str, object]) -> None:
+    """Keep the marketplace index aligned with the root manifest."""
+    path = plugin_root / ".github" / "plugin" / "marketplace.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"Marketplace index missing: {path}")
+    marketplace = json.loads(path.read_text(encoding="utf-8"))
+    entries = [entry for entry in marketplace.get("plugins") or [] if entry.get("name") == manifest.get("name")]
+    if len(entries) != 1:
+        raise ValueError(
+            f"Marketplace must list exactly one {manifest.get('name')!r} entry; found {len(entries)}"
+        )
+    entry = entries[0]
+    if entry.get("source") != "./":
+        raise ValueError("Marketplace entry source must be './' because the plugin root is the repository root")
+    if entry.get("version") != manifest.get("version"):
+        raise ValueError(
+            f"Marketplace entry version {entry.get('version')!r} does not match plugin.json {manifest.get('version')!r}"
+        )
 
 
 if __name__ == "__main__":
