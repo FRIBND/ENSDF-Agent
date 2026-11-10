@@ -5,7 +5,8 @@
     "version": "0.6.3"
   },
   "owner": {
-    "name": "FRIB Nuclear Data Group"
+    "name": "FRIB Nuclear Data Group",
+    "email": "nucleardata@frib.msu.edu"
   },
   "plugins": [
     {

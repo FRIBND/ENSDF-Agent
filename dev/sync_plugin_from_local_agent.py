@@ -10,8 +10,9 @@ Run order, see main():
     3. sync_agent_file()   - generate the single agent in
                              com.github.copilot/agents/ from source; retain
                              agent-scoped hooks and inject canonical version.
-    4. sync()              - package prompts/ as Copilot commands and mirror
-                             scripts/, hooks/scripts/, and skills/ into supported paths.
+    4. sync()              - package skills-dormant/ as explicit Copilot
+                             commands and mirror scripts/, hooks/scripts/,
+                             and skills/ into supported paths.
 
 plugin.json is plugin-owned. Agent and hook outputs are generated in the Agent
 Plugins 1.0 Copilot namespace; legacy root copies are removed.
@@ -28,11 +29,12 @@ import sys
 from pathlib import Path
 
 
-# Managed source entries. Prompt-folder SKILL.md files are packaged as Copilot commands.
+# Dormant SKILL.md files become explicit slash commands so they are not added
+# to the plugin's automatically discovered skill catalog.
 managed_entries = (
-    "prompts",
     "scripts",
     "skills",
+    "skills-dormant",
     "hooks/scripts",
 )
 managed_plugin_entries = (
@@ -115,14 +117,17 @@ def normalize_relative_path(path: Path | str) -> Path:
 
 
 def plugin_relative_path(path: Path) -> Path:
-    if path.parts and path.parts[0] == "prompts":
+    if path.parts and path.parts[0] == "skills-dormant":
         if len(path.parts) == 3 and path.name == "SKILL.md":
             return Path(
                 "com.github.copilot",
                 "commands",
                 f"{path.parts[1]}.prompt.md",
             )
-        return Path("com.github.copilot", "commands", *path.parts[1:])
+        raise ValueError(
+            "Dormant skills must contain one SKILL.md at "
+            f"<skill-name>/SKILL.md; unsupported source path: {path}"
+        )
     if path.parts[:2] == ("hooks", "scripts"):
         return Path("com.github.copilot", "hooks", *path.parts[1:])
     return path
@@ -186,9 +191,9 @@ def iter_managed_target_files(plugin_root: Path) -> list[Path]:
     return sorted(set(files))
 
 
-def plugin_prompt_content(source_path: Path, source_relative: Path) -> str:
+def plugin_command_content(source_path: Path, source_relative: Path) -> str:
     text = source_path.read_text(encoding="utf-8")
-    if source_relative.parts and source_relative.parts[0] == "prompts":
+    if source_relative.parts and source_relative.parts[0] == "skills-dormant":
         command_name = source_relative.parts[1]
         text = re.sub(
             r"(?m)^name:\s*.*$",
@@ -196,7 +201,86 @@ def plugin_prompt_content(source_path: Path, source_relative: Path) -> str:
             text,
             count=1,
         )
+        text = re.sub(
+            r"(?m)^[ \t]*disable-model-invocation:[^\r\n]*(?:\r?\n|$)",
+            "",
+            text,
+            count=1,
+        )
     return text
+
+
+def is_command_source(source_relative: Path) -> bool:
+    return bool(source_relative.parts and source_relative.parts[0] == "skills-dormant")
+
+
+def validate_source_layout(source_root: Path) -> None:
+    """Fail before syncing if a managed source directory is absent or malformed."""
+    source_agent = source_root / "agents" / "ENSDF-Agent.agent.md"
+    if not source_agent.is_file():
+        raise FileNotFoundError(f"Source agent not found: {source_agent}")
+
+    for entry in managed_entries:
+        path = source_root / entry
+        if not path.is_dir():
+            raise FileNotFoundError(f"Managed source directory not found: {path}")
+        if not any(child.is_file() for child in path.rglob("*")):
+            raise ValueError(f"Managed source directory is empty: {path}")
+
+    dormant_root = source_root / "skills-dormant"
+    for skill_dir in dormant_root.iterdir():
+        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
+            raise ValueError(
+                "Each dormant skill must be a folder containing SKILL.md: "
+                f"{skill_dir}"
+            )
+    unsupported_files = [
+        path
+        for path in dormant_root.rglob("*")
+        if path.is_file() and path.name != "SKILL.md"
+    ]
+    if unsupported_files:
+        raise ValueError(
+            "Dormant skills can only be packaged as command files; "
+            "unsupported resources: "
+            + ", ".join(str(path) for path in unsupported_files)
+        )
+
+
+def _agent_hook_record_count(agent_text: str) -> int:
+    """Count hook entries in agent frontmatter for rewrite preservation checks."""
+    lines = agent_text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return 0
+    frontmatter_end = next(
+        (index for index in range(1, len(lines)) if lines[index].strip() == "---"),
+        None,
+    )
+    if frontmatter_end is None:
+        return 0
+    hooks_start = next(
+        (
+            index
+            for index in range(1, frontmatter_end)
+            if re.fullmatch(r"hooks:[ \t]*(?:#.*)?", lines[index])
+        ),
+        None,
+    )
+    if hooks_start is None:
+        return 0
+    hooks_end = next(
+        (
+            index
+            for index in range(hooks_start + 1, frontmatter_end)
+            if lines[index].strip() and not lines[index][0].isspace()
+        ),
+        frontmatter_end,
+    )
+    return sum(
+        1
+        for line in lines[hooks_start + 1:hooks_end]
+        if re.match(r"^[ \t]*-[ \t]+type[ \t]*:", line)
+    )
 
 
 def remove_empty_directories(root: Path) -> None:
@@ -512,6 +596,8 @@ def build_merged_agent_content(
     appended section is simply omitted.
     """
     rewritten_agent = rewrite_agent_hook_block(agent_text)
+    if _agent_hook_record_count(agent_text) != _agent_hook_record_count(rewritten_agent):
+        raise ValueError("Rewriting hook paths changed the agent's hook entry count")
     rewritten_agent = rewritten_agent.rstrip("\n")
     if version:
         rewritten_agent = inject_agent_version(rewritten_agent, version).rstrip("\n")
@@ -557,8 +643,6 @@ def sync_agent_file(
         plugin_root / "com.github.copilot" / "copilot-instructions.md",
     ]
 
-    remove_plugin_wide_hook_config(plugin_root, dry_run)
-
     if not source_agent.is_file():
         print("SKIP   agents/ENSDF-Agent.agent.md (source not found)")
         return
@@ -574,6 +658,8 @@ def sync_agent_file(
         instructions_text,
         version,
     )
+
+    remove_plugin_wide_hook_config(plugin_root, dry_run)
 
     rel_label = target_agent.relative_to(plugin_root).as_posix()
     existing = target_agent.read_text(encoding="utf-8") if target_agent.is_file() else None
@@ -606,18 +692,19 @@ def sync_agent_file(
 
 
 def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
-    """Package prompt workflows as commands, plus scripts, hooks, and skills.
+    """Package dormant skills as commands, plus scripts, hooks, and active skills.
 
     Copies new or changed files, removes stale managed files, and skips
-    unchanged files plus excluded directories. Rare workflows stored in the
-    source prompts/ directory remain explicitly invoked Copilot commands;
-    portable skills remain under the plugin root's skills/ directory.
+    unchanged files plus excluded directories. SKILL.md files under the source
+    skills-dormant/ directory become explicit Copilot commands, while active
+    skills remain under the plugin root's skills/ directory.
     """
     if not source_root.is_dir():
         raise FileNotFoundError(f"Source .github path not found: {source_root}")
     if not plugin_root.is_dir():
         raise FileNotFoundError(f"Plugin root not found: {plugin_root}")
 
+    validate_source_layout(source_root)
     source_files = iter_managed_source_files(source_root)
     target_files = iter_managed_target_files(plugin_root)
     source_targets = {
@@ -642,8 +729,8 @@ def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
 
         copy_needed = True
         if target_path.is_file():
-            if relative.parts and relative.parts[0] == "prompts":
-                copy_needed = plugin_prompt_content(source_path, relative) != target_path.read_text(encoding="utf-8")
+            if is_command_source(relative):
+                copy_needed = plugin_command_content(source_path, relative) != target_path.read_text(encoding="utf-8")
             else:
                 copy_needed = sha256sum(source_path) != sha256sum(target_path)
 
@@ -655,9 +742,9 @@ def sync(source_root: Path, plugin_root: Path, dry_run: bool) -> int:
         if dry_run:
             print(f"COPY   {target_relative.as_posix()}")
         else:
-            if relative.parts and relative.parts[0] == "prompts":
+            if is_command_source(relative):
                 target_path.write_text(
-                    plugin_prompt_content(source_path, relative),
+                    plugin_command_content(source_path, relative),
                     encoding="utf-8",
                 )
             else:
@@ -735,6 +822,7 @@ def main() -> int:
     plugin_root = repo_root / "plugins" / "ensdf-agent"
     source_root = Path(r"D:\X\ND\ENSDF\.github")
 
+    validate_source_layout(source_root)
     if not args.no_bump:
         version = bump_versions(repo_root, args.bump, args.dry_run)
     else:

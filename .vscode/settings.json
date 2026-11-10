@@ -5,6 +5,5 @@
   ],
   "json.schemaDownload.trustedDomains": {
     "https://agent-plugins.org": true
-  },
-  "python-envs.defaultEnvManager": "ms-python.python:system"
+  }
 }

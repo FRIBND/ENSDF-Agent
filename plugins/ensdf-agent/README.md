@@ -29,7 +29,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 
 ## Plugin Package
 
-The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, portable skills live under `skills/`, and VS Code-specific agents, commands, and hooks live under `com.github.copilot/`. The 14 low-frequency workflows sourced from `.github/prompts/` remain explicit slash commands rather than being added to the skill catalog.
+The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, active portable skills live under `skills/`, and VS Code-specific agents, commands, and hooks live under `com.github.copilot/`. The 14 low-frequency skills sourced from `.github/skills-dormant/` are packaged as explicit slash commands, not added to the automatically discovered skill catalog.
 
 ## Development Timeline
 
