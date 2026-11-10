@@ -123,6 +123,42 @@ class SyncTests(unittest.TestCase):
                 sync_plugin.bump_versions(root, "patch", False)
             self.assertEqual(json.loads(canonical.read_text())["version"], "0.6.3")
 
+    def test_compat_manifest_mirrors_all_metadata_and_bumped_version(self):
+        with tempfile.TemporaryDirectory(prefix="manifest test ") as directory:
+            root = Path(directory)
+            canonical = root / sync_plugin.version_files[0]
+            canonical.parent.mkdir(parents=True)
+            canonical.write_text(
+                '{"name": "example", "version": "0.6.3", "description": "original"}\n',
+                encoding="utf-8",
+            )
+            marketplace = root / sync_plugin.version_files[1]
+            marketplace.parent.mkdir(parents=True)
+            marketplace.write_text('{"version": "0.6.3"}\n', encoding="utf-8")
+            compat = canonical.parent / ".plugin" / "plugin.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                sync_plugin.sync_compat_manifest(canonical.parent, True)
+                self.assertFalse(compat.exists())
+                sync_plugin.sync_compat_manifest(canonical.parent, False)
+                self.assertEqual(compat.read_bytes(), canonical.read_bytes())
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    sync_plugin.sync_compat_manifest(canonical.parent, True, "0.6.4")
+                self.assertIn("COPY", output.getvalue())
+                self.assertEqual(json.loads(compat.read_text())["version"], "0.6.3")
+                sync_plugin.bump_versions(root, "patch", False)
+                sync_plugin.sync_compat_manifest(canonical.parent, False)
+                self.assertEqual(compat.read_bytes(), canonical.read_bytes())
+                self.assertEqual(json.loads(compat.read_text())["version"], "0.6.4")
+                canonical.write_text(
+                    '{"name": "example", "version": "0.6.4", "description": "updated"}\n',
+                    encoding="utf-8",
+                )
+                sync_plugin.sync_compat_manifest(canonical.parent, False)
+                self.assertEqual(compat.read_bytes(), canonical.read_bytes())
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    sync_plugin.sync_compat_manifest(canonical.parent, False)
+                self.assertIn("SKIP", output.getvalue())
+
     def test_only_workstation_pdf_path_changes_in_dormant_skill(self):
         source = "Java tool at `D:\\X\\ND\\McMaster-MSU-Java-NDS\\`.\n"
         result = sync_plugin.rewrite_markdown_paths(source, Path("skills-dormant/ens2pdf/SKILL.md"))

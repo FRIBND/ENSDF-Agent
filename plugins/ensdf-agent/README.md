@@ -32,6 +32,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 | Path | Contents |
 |------|----------|
 | `plugin.json` | Plugin metadata |
+| `.plugin/plugin.json` | Compatibility copy of plugin metadata |
 | `com.github.copilot/agents/` | ENSDF-Agent definition |
 | `com.github.copilot/hooks/scripts/` | Hook scripts used by ENSDF-Agent |
 | `scripts/` | ENSDF processing and validation scripts |

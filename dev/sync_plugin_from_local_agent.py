@@ -193,6 +193,27 @@ def bump_versions(repo_root: Path, bump: str, dry_run: bool) -> str:
     return new
 
 
+def sync_compat_manifest(plugin_root: Path, dry_run: bool, planned_version: str | None = None) -> None:
+    """Mirror the canonical manifest for clients that look in .plugin."""
+    source = plugin_root / "plugin.json"
+    target = plugin_root / ".plugin" / "plugin.json"
+    content = source.read_bytes()
+    if planned_version is not None:
+        content = re.sub(
+            rb'"version"\s*:\s*"[^"]*"',
+            f'"version": "{planned_version}"'.encode("ascii"),
+            content,
+        )
+    if target.is_file() and target.read_bytes() == content:
+        print("SKIP   .plugin/plugin.json")
+    elif dry_run:
+        print("COPY   .plugin/plugin.json")
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        print("COPIED .plugin/plugin.json")
+
+
 def normalize_relative_path(path: Path | str) -> Path:
     return Path(path)
 
@@ -1157,10 +1178,14 @@ def main() -> int:
         for dependency in dependencies:
             print(f"  {dependency}")
         print()
+    planned_version = None
     if not args.no_bump:
-        bump_versions(repo_root, args.bump, args.dry_run)
+        new_version = bump_versions(repo_root, args.bump, args.dry_run)
+        if args.dry_run:
+            planned_version = new_version
     else:
         get_canonical_version(repo_root)
+    sync_compat_manifest(plugin_root, args.dry_run, planned_version)
     sync_readme(repo_root, plugin_root, args.dry_run)
     sync_agent_file(source_root, plugin_root, args.dry_run)
     return sync(source_root, plugin_root, args.dry_run)
