@@ -107,7 +107,3 @@ Contact: nucleardata@frib.msu.edu
 ## License
 
 MIT
-
-
-#### ENSDF-Agent Architecture
-<img width="2752" height="1536" alt="Architecture" src="https://github.com/user-attachments/assets/63ee8a24-89d5-45df-b60e-237094add77f" />
