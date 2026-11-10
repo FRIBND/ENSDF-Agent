@@ -33,6 +33,16 @@ class SyncTests(unittest.TestCase):
                   "chat.tools.terminal.autoApprove": {"dangerous": true},
                   "chat.useAgentSkills": true,
                   "chat.useCustomAgentHooks": false,
+                  "chat.defaultToCopilotHarness": true,
+                  "chat.agent.maxRequests": 100,
+                  "chat.tools.terminal.outputLocation": "terminal",
+                  "chat.enablePremiumOverages": true,
+                  "chat.defaultModel": "private-model",
+                  "chat.pluginLocations": {"C:\\private": true},
+                  "github.copilot.enable": {"*": true, "log": false, "private-language": true},
+                  "extensions.autoUpdateDelay": 3,
+                  "chat.agent.visibility": {"modernize-java": false, "private-agent": true},
+                  "chat.plugins.marketplaces": ["FRIBND/ENSDF-Agent", "private/marketplace"],
                   "files.associations": {
                     "*.ens": "log",
                     "private/path/*": "text",
@@ -46,10 +56,24 @@ class SyncTests(unittest.TestCase):
                 }''',
                 encoding="utf-8",
             )
-            content = sync_plugin.build_vscode_settings(source)
+            with contextlib.redirect_stdout(io.StringIO()) as warnings:
+                content = sync_plugin.build_vscode_settings(source)
+            self.assertIn("chat.tools.terminal.autoApprove", warnings.getvalue())
+            self.assertIn("chat.pluginLocations", warnings.getvalue())
+            self.assertIn("chat.agent.visibility: 1 entries not exported", warnings.getvalue())
+            self.assertIn("chat.plugins.marketplaces: 1 entries not exported", warnings.getvalue())
+            self.assertNotIn("private-agent", warnings.getvalue())
+            self.assertNotIn("private/marketplace", warnings.getvalue())
             self.assertEqual(json.loads(content), {
                 "chat.useAgentSkills": True,
                 "chat.useCustomAgentHooks": False,
+                "chat.defaultToCopilotHarness": True,
+                "chat.agent.maxRequests": 100,
+                "chat.tools.terminal.outputLocation": "terminal",
+                "github.copilot.enable": {"*": True, "log": False},
+                "extensions.autoUpdateDelay": 3,
+                "chat.agent.visibility": {"modernize-java": False},
+                "chat.plugins.marketplaces": ["FRIBND/ENSDF-Agent"],
                 "files.associations": {"*.ens": "log"},
                 "[log]": {"editor.wordWrap": "on", "editor.rulers": [5, 80]},
             })
@@ -72,6 +96,12 @@ class SyncTests(unittest.TestCase):
                 '{"chat.useAgentSkills": true, "chat.useAgentSkills": false}',
                 '{"files.associations": {"*.ens": "C:\\\\private\\\\path"}}',
                 '{"[log]": {"editor.rulers": [true]}}',
+                '{"chat.agent.maxRequests": true}',
+                '{"chat.tools.terminal.outputLocation": "C:\\\\private"}',
+                '{"github.copilot.enable": {"log": "yes"}}',
+                '{"chat.agent.visibility": {"modernize-java": "no"}}',
+                '{"chat.plugins.marketplaces": "wrong"}',
+                '{"chat.defaultModel": false}',
                 '{"chat.useAgentSkills": true /* unterminated',
             ):
                 with self.subTest(content=content):

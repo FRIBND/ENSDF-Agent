@@ -61,10 +61,67 @@ version_files = [
 
 VSCODE_BOOLEAN_SETTINGS = (
     "github.copilot.chat.agent.enabled",
+    "github.copilot.enableRepoSpecificConfig",
+    "github.copilot.chat.codesearch.enabled",
+    "github.copilot.chat.copilotMemory.enabled",
+    "github.copilot.chat.cli.customAgents.enabled",
+    "github.copilot.nextEditSuggestions.enabled",
+    "github.copilot.chat.notebook.enhancedNextEditSuggestions.enabled",
+    "github.copilot.chat.responsesApi.toolSearchTool.enabled",
+    "github.copilot.chat.localIndex.enabled",
+    "chat.editor.preferCopilotHarness",
+    "chat.defaultToCopilotHarness",
+    "chat.copilot.localModel.enabled",
     "chat.useAgentSkills",
     "chat.useCustomAgentHooks",
+    "chat.customAgentInSubagent.enabled",
+    "chat.tips.enabled",
+    "chat.autopilot.advanced.enabled",
+    "chat.emptyState.history.enabled",
+    "chat.restoreLastPanelSession",
+    "chat.todoListTool.enabled",
     "chat.plugins.enabled",
+    "chat.extensionUnification.enabled",
+    "chat.tools.confirmationCarousel.enabled",
+    "chat.tools.compressOutput.enabled",
+    "chat.useClaudeHooks",
+    "chat.artifacts.enabled",
+    "chat.customizations.promptMigration.enabled",
+    "chat.experimental.stickyScroll.enabled",
+    "chat.agentHost.codexAgent.enabled",
+    "chat.editor.codex.preferAgentHost",
+    "chat.canvases.enabled",
+    "chat.viewProgressBadge.enabled",
+    "chat.customizations.marketplace.enabled",
+    "chat.agentSessions.sessionStorageCleanupSuggestion.enabled",
+    "chat.agentHost.computerUse.enabled",
+    "chat.agentHost.moveChats.enabled",
+    "sessions.chat.unifiedWorkspacePicker.enabled",
 )
+VSCODE_ENUM_SETTINGS = {
+    "github.copilot.nextEditSuggestions.eagerness": {"low", "medium", "high"},
+    "chat.agentSessionsViewLocation": {"view", "sidebar", "panel"},
+    "chat.notifyWindowOnConfirmation": {"always", "never", "off", "auto"},
+    "chat.notifyWindowOnResponseReceived": {"always", "never", "off", "auto"},
+    "chat.tools.terminal.outputLocation": {"terminal", "chat"},
+    "chat.viewSessions.orientation": {"stacked", "sideBySide"},
+    "chat.persistentProgress": {"draw", "never", "auto"},
+    "chat.persistentProgressVerbosity": {"compact", "detailed"},
+    "chat.defaultModel": {"auto"},
+}
+VSCODE_INTEGER_SETTINGS = {
+    "chat.fontSize": (1, 200),
+    "chat.agent.maxRequests": (1, 100000),
+    "extensions.autoUpdateDelay": (0, 100000),
+}
+VSCODE_PUBLIC_AGENT_VISIBILITY = frozenset({
+    "modernize-azure-dotnet",
+    "modernize-azure-java",
+    "modernize-java",
+    "modernize-java-upgrade",
+    "vscjava.vscode-java-upgrade/modernize-java",
+    "vscjava.vscode-java-upgrade.modernize-java",
+})
 ENSDF_FILE_PATTERNS = frozenset(
     f"*.{suffix}" for suffix in (
         "ens", "new", "old", "adp", "avg", "mrg", "gam", "lev", "fed",
@@ -271,6 +328,54 @@ def build_vscode_settings(source: Path) -> str:
             if not isinstance(value, bool):
                 raise ValueError(f"VS Code setting must be boolean: {key}")
             selected[key] = value
+    for key, allowed in VSCODE_ENUM_SETTINGS.items():
+        if key in settings:
+            value = settings[key]
+            if not isinstance(value, str):
+                raise ValueError(f"VS Code setting must be a string: {key}")
+            if key == "chat.defaultModel" and value != "auto":
+                print("WARNING: Custom chat.defaultModel is not included in the exported settings.")
+                continue
+            if value not in allowed:
+                raise ValueError(f"Unsupported value for VS Code setting: {key}")
+            selected[key] = value
+    for key, (minimum, maximum) in VSCODE_INTEGER_SETTINGS.items():
+        if key in settings:
+            value = settings[key]
+            if type(value) is not int or not minimum <= value <= maximum:
+                raise ValueError(f"Invalid integer for VS Code setting: {key}")
+            selected[key] = value
+    enable_languages = settings.get("github.copilot.enable")
+    if enable_languages is not None:
+        if not isinstance(enable_languages, dict):
+            raise ValueError("VS Code github.copilot.enable must be an object.")
+        portable_languages = {"*", "plaintext", "markdown", "scminput", "log", "python"}
+        language_settings = {}
+        for key, value in enable_languages.items():
+            if key in portable_languages:
+                if not isinstance(value, bool):
+                    raise ValueError(f"VS Code Copilot language setting must be boolean: {key}")
+                language_settings[key] = value
+        if language_settings:
+            selected["github.copilot.enable"] = language_settings
+    visibility = settings.get("chat.agent.visibility")
+    if visibility is not None:
+        if not isinstance(visibility, dict):
+            raise ValueError("VS Code chat.agent.visibility must be an object.")
+        portable_visibility = {}
+        for key, value in visibility.items():
+            if key in VSCODE_PUBLIC_AGENT_VISIBILITY:
+                if not isinstance(value, bool):
+                    raise ValueError(f"VS Code agent visibility must be boolean: {key}")
+                portable_visibility[key] = value
+        if portable_visibility:
+            selected["chat.agent.visibility"] = portable_visibility
+    marketplaces = settings.get("chat.plugins.marketplaces")
+    if marketplaces is not None:
+        if not isinstance(marketplaces, list):
+            raise ValueError("VS Code chat.plugins.marketplaces must be a list.")
+        if "FRIBND/ENSDF-Agent" in marketplaces:
+            selected["chat.plugins.marketplaces"] = ["FRIBND/ENSDF-Agent"]
     associations = settings.get("files.associations", {})
     if not isinstance(associations, dict):
         raise ValueError("VS Code files.associations must be an object.")
@@ -309,6 +414,29 @@ def build_vscode_settings(source: Path) -> str:
         selected["[log]"] = selected_log
     if not selected:
         raise ValueError("No ENSDF-related VS Code settings found.")
+    omitted = sorted(
+        key for key in settings
+        if key.startswith(("chat.", "github.copilot.", "extensions.", "agents.", "sessions.chat."))
+        and key not in selected
+    )
+    if omitted:
+        print("VS Code settings not exported (review before sharing):")
+        for key in omitted:
+            print(f"  {key}")
+    for key in ("github.copilot.enable", "chat.agent.visibility", "files.associations", "[log]"):
+        source_value = settings.get(key)
+        if isinstance(source_value, dict):
+            exported_value = selected.get(key, {})
+            if isinstance(exported_value, dict):
+                omitted_count = len(source_value.keys() - exported_value.keys())
+                if omitted_count:
+                    print(f"VS Code setting {key}: {omitted_count} entries not exported.")
+    if isinstance(marketplaces, list):
+        exported_marketplaces = selected.get("chat.plugins.marketplaces", [])
+        if isinstance(exported_marketplaces, list):
+            omitted_count = len(marketplaces) - len(exported_marketplaces)
+            if omitted_count:
+                print(f"VS Code setting chat.plugins.marketplaces: {omitted_count} entries not exported.")
     return json.dumps(selected, ensure_ascii=False, indent=2) + "\n"
 
 
