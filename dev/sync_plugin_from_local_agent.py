@@ -63,6 +63,14 @@ version_files = [
     Path(".github/plugin/marketplace.json"),
 ]
 
+PLUGIN_MARKETPLACE = "FRIBND/ENSDF-Agent"
+
+# Settings users need for plugin features; validated after export.
+REQUIRED_EXPORTED_SETTINGS: dict[str, object] = {
+    "chat.plugins.enabled": True,
+    "chat.plugins.marketplaces": [PLUGIN_MARKETPLACE],
+}
+
 VSCODE_BOOLEAN_SETTINGS = (
     "github.copilot.chat.agent.enabled",
     "github.copilot.enableRepoSpecificConfig",
@@ -284,15 +292,36 @@ def remove_compat_manifest(plugin_root: Path, dry_run: bool) -> None:
     print("REMOVED .plugin/plugin.json (redundant; root plugin.json is the manifest)")
 
 
-def default_vscode_settings_path() -> Path:
+def vscode_settings_candidates() -> list[Path]:
+    """User settings locations tried when --settings-file is omitted."""
     if sys.platform == "win32":
         appdata = os.environ.get("APPDATA")
         if not appdata:
             raise ValueError("APPDATA is not set; specify --settings-file.")
-        return Path(appdata) / "Code" / "User" / "settings.json"
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Code" / "User" / "settings.json"
-    return Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "Code" / "User" / "settings.json"
+        bases = [Path(appdata) / "Code", Path(appdata) / "Code - Insiders"]
+    elif sys.platform == "darwin":
+        support = Path.home() / "Library" / "Application Support"
+        bases = [support / "Code", support / "Code - Insiders"]
+    else:
+        config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+        bases = [config / "Code", config / "Code - Insiders"]
+    return [base / "User" / "settings.json" for base in bases]
+
+
+def resolve_vscode_settings_path(explicit: Path | None) -> Path:
+    """Pick the settings file to export, failing with the paths that were tried."""
+    if explicit is not None:
+        if not explicit.is_file():
+            raise FileNotFoundError(f"VS Code settings file not found: {explicit}")
+        return explicit
+    candidates = vscode_settings_candidates()
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    tried = "; ".join(str(path) for path in candidates)
+    raise FileNotFoundError(
+        f"VS Code user settings not found. Tried: {tried}. Pass --settings-file <path>."
+    )
 
 
 def build_vscode_settings(source: Path) -> str:
@@ -373,8 +402,8 @@ def build_vscode_settings(source: Path) -> str:
     if marketplaces is not None:
         if not isinstance(marketplaces, list):
             raise ValueError("VS Code chat.plugins.marketplaces must be a list.")
-        if "FRIBND/ENSDF-Agent" in marketplaces:
-            selected["chat.plugins.marketplaces"] = ["FRIBND/ENSDF-Agent"]
+        if PLUGIN_MARKETPLACE in marketplaces:
+            selected["chat.plugins.marketplaces"] = [PLUGIN_MARKETPLACE]
     associations = settings.get("files.associations", {})
     if not isinstance(associations, dict):
         raise ValueError("VS Code files.associations must be an object.")
@@ -436,7 +465,17 @@ def build_vscode_settings(source: Path) -> str:
             omitted_count = len(marketplaces) - len(exported_marketplaces)
             if omitted_count:
                 print(f"VS Code setting chat.plugins.marketplaces: {omitted_count} entries not exported.")
+    require_plugin_settings(selected)
     return json.dumps(selected, ensure_ascii=False, indent=2) + "\n"
+
+
+def require_plugin_settings(selected: dict[str, object]) -> None:
+    """Fail when a setting users need for plugin features was dropped."""
+    for key, expected in REQUIRED_EXPORTED_SETTINGS.items():
+        if selected.get(key) != expected:
+            raise ValueError(
+                f"Exported VS Code settings must contain {key}={expected!r}; got {selected.get(key)!r}"
+            )
 
 
 def sync_vscode_settings(plugin_root: Path, content: str, dry_run: bool) -> None:
@@ -1488,7 +1527,9 @@ def main() -> int:
 
     settings_content = None
     if not args.skip_vscode_settings:
-        settings_content = build_vscode_settings(args.settings_file or default_vscode_settings_path())
+        settings_source = resolve_vscode_settings_path(args.settings_file)
+        print(f"VS Code settings source: {settings_source}")
+        settings_content = build_vscode_settings(settings_source)
     validate_source_layout(source_root)
     # Validate transformations before version or payload files are modified.
     for relative in iter_managed_source_files(source_root):

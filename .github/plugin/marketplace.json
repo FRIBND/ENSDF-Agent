@@ -2,7 +2,7 @@
   "name": "ensdf-agent",
   "metadata": {
     "description": "FRIB Nuclear Data plugin marketplace - ENSDF nuclear data evaluation tools and agents",
-    "version": "0.7.4"
+    "version": "0.7.5"
   },
   "owner": {
     "name": "FRIB Nuclear Data Group",
@@ -13,7 +13,7 @@
       "name": "ensdf-agent",
       "source": "./",
       "description": "ENSDF-Agent for nuclear data evaluation",
-      "version": "0.7.4",
+      "version": "0.7.5",
       "license": "MIT",
       "homepage": "https://github.com/FRIBND/ENSDF-Agent",
       "repository": "https://github.com/FRIBND/ENSDF-Agent",
