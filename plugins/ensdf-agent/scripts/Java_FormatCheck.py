@@ -8,12 +8,13 @@ from pathlib import Path
 
 # Auto-discover latest FormatCheck jar (like ens2pdf.py)
 def find_latest_jar() -> str | None:
-    candidates = glob.glob(r"D:\\X\\ND\\FormatCheck\\FormatCheck_*.jar")
+    configured = os.environ.get("ENSDF_FORMATCHECK_JAR")
+    candidates = [configured] if configured else glob.glob("**/FormatCheck_*.jar", recursive=True)
     if not candidates:
         return None
     candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     return candidates[0]
-FILES_DIR = r"D:\X\ND\Files"
+FILES_DIR = os.environ.get("ENSDF_FORMATCHECK_OUTPUT_DIR", str(Path.cwd() / ".github" / "temp" / "formatcheck"))
 OUTPUT_FILE = Path(FILES_DIR) / "formatcheck.fmt"
 
 def open_file(path: str, use_vscode: bool = True) -> None:
@@ -37,7 +38,7 @@ def open_file(path: str, use_vscode: bool = True) -> None:
 def run_formatcheck(ens_path: str, open_after: bool = False, use_vscode: bool = True) -> int:
     """Run the Java FormatCheck tool on the given ENSDF file.
 
-    Generates D:\\X\\ND\\Files\\formatcheck.fmt
+    Generates a formatcheck.fmt report in FILES_DIR.
     Returns process return code (0 on success).
     """
     # Validate inputs
@@ -47,7 +48,7 @@ def run_formatcheck(ens_path: str, open_after: bool = False, use_vscode: bool = 
         return 1
     jar_path = find_latest_jar()
     if not jar_path or not os.path.exists(jar_path):
-        print("Error: Could not find FormatCheck jar. Looked for 'D:/X/ND/FormatCheck/FormatCheck_*.jar'")
+        print("Error: Set ENSDF_FORMATCHECK_JAR to an existing FormatCheck JAR, or place it in the workspace.")
         return 1
 
     # Prepare output location
@@ -102,9 +103,9 @@ def run_formatcheck(ens_path: str, open_after: bool = False, use_vscode: bool = 
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("Usage:")
-        print("  python .github/Java_FormatCheck.py <path-to-file>.ens [--open] [--system]")
+        print("  python Java_FormatCheck.py <path-to-file>.ens [--open] [--system]")
         print("Notes:")
-        print("  - Output is written to D:/X/ND/Files/formatcheck.fmt")
+        print(f"  - Output is written to {OUTPUT_FILE}")
         return 1
 
     open_after = "--open" in argv

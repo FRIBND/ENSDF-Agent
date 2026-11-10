@@ -7,8 +7,8 @@ from collections import Counter
 from pathlib import Path
 
 
-DEFAULT_OLD_FILE = r"D:\X\ND\ENSDF\A35\A35_NDS2011.txt"
-DEFAULT_NEW_FILE = r"D:\X\ND\ENSDF\A35\A35_revised_2026.ens"
+
+
 
 
 def read_lines(path: Path) -> list[str]:
@@ -26,6 +26,10 @@ def powershell_style_counts(old_lines: list[str], new_lines: list[str]) -> tuple
 
 
 def compare_object_counts(old_path: Path, new_path: Path) -> tuple[int, int, int, str]:
+    import shutil
+    if not shutil.which("powershell"):
+        total, removed, added = powershell_style_counts(read_lines(old_path), read_lines(new_path))
+        return total, removed, added, "CounterFallback (PowerShell unavailable)"
     old_literal = str(old_path).replace("'", "''")
     new_literal = str(new_path).replace("'", "''")
     ps_command = (
@@ -91,15 +95,11 @@ def main() -> int:
     )
     parser.add_argument(
         "old_file",
-        nargs="?",
-        default=DEFAULT_OLD_FILE,
-        help="Path to old/original file (optional; defaults to DEFAULT_OLD_FILE in this script)",
+        help="Path to old/original file",
     )
     parser.add_argument(
         "new_file",
-        nargs="?",
-        default=DEFAULT_NEW_FILE,
-        help="Path to new/edited file (optional; defaults to DEFAULT_NEW_FILE in this script)",
+        help="Path to new/edited file",
     )
     args = parser.parse_args()
 

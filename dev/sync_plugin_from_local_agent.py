@@ -9,7 +9,7 @@ Run order, see main():
     2. sync_readme()       - copy repo README if changed.
     3. sync_agent_file()   - generate the single agent in
                              com.github.copilot/agents/ from source; retain
-                             agent-scoped hooks and inject canonical version.
+                             agent-scoped hooks.
     4. sync()              - mirror skills/, skills-dormant/, scripts/, and
                              hooks/scripts/, adapting bundled references.
 
@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import posixpath
 import re
 import shutil
 import sys
@@ -58,6 +57,84 @@ version_files = [
     Path("plugins/ensdf-agent/plugin.json"),  # canonical source
     Path(".github/plugin/marketplace.json"),
 ]
+
+PDF_SOURCE_MAIN_SHA256 = "36c91c8c52106757652314a51e98aa937ad7cbbcae092a980a3ae77fe887678b"
+PORTABLE_PDF_MAIN = '''
+def main():
+    import argparse
+    import fnmatch
+    import tempfile
+
+    parser = argparse.ArgumentParser(description="Convert workspace ENSDF files to PDF.")
+    parser.add_argument("input", help="ENSDF file, dataset name, element, or glob")
+    parser.add_argument("--jar", default=os.environ.get("ENSDF_NDS_JAR"),
+                        help="McMaster-MSU Java NDS JAR (or set ENSDF_NDS_JAR)")
+    parser.add_argument("--open", action="store_true", help="Open generated PDFs")
+    parser.add_argument("--system", action="store_true", help="Use the system PDF viewer")
+    args = parser.parse_args()
+    workspace = Path.cwd()
+    if args.jar:
+        jar = Path(args.jar).expanduser().resolve()
+        if not jar.is_file():
+            parser.error(f"Java NDS JAR not found: {jar}")
+    else:
+        jars = sorted(workspace.rglob("McMaster_MSU_JAVA_NDS_v*.jar"))
+        if len(jars) != 1:
+            parser.error("Provide the Java NDS JAR using --jar or ENSDF_NDS_JAR.")
+        jar = jars[0].resolve()
+    if not shutil.which("java"):
+        parser.error("Java executable not found on PATH.")
+    supplied = Path(args.input).expanduser()
+    if supplied.is_file():
+        files = [supplied.resolve()]
+    else:
+        pattern = args.input.replace("\\\\", "/")
+        if not pattern.lower().endswith(".ens"):
+            pattern += "*.ens" if pattern.isalpha() else ".ens"
+        files = sorted(
+            path.resolve() for path in workspace.rglob("*.ens")
+            if fnmatch.fnmatch(path.name.casefold(), pattern.casefold())
+            or fnmatch.fnmatch(path.relative_to(workspace).as_posix().casefold(), pattern.casefold())
+        )
+    if not files:
+        parser.error(f"No ENSDF files match: {args.input}")
+    destinations = []
+    for path in files:
+        parent = path.parent.parent if path.parent.name.lower() == "new" else path.parent
+        destinations.append(parent / "pdf" / (path.stem + ".pdf"))
+    if len(set(destinations)) != len(destinations):
+        parser.error("Selected files would produce duplicate PDF paths.")
+    existing = [path for path in destinations if path.exists()]
+    if existing:
+        parser.error(f"PDF already exists; refusing to overwrite: {existing[0]}")
+    with tempfile.TemporaryDirectory(prefix="ensdf-pdf-") as temp:
+        generated = []
+        for index, (source, destination) in enumerate(zip(files, destinations)):
+            staging = Path(temp) / str(index)
+            staging.mkdir()
+            pdf = run_java(source, str(jar), staging)
+            if pdf is None:
+                raise SystemExit(f"PDF conversion failed: {source}")
+            generated.append((pdf, destination))
+        for pdf, destination in generated:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            move_all_pdfs([(pdf, destination)], destination.parent)
+            if not destination.is_file():
+                raise SystemExit(f"Could not move generated PDF to {destination}")
+            if args.open:
+                if not args.system and shutil.which("code"):
+                    subprocess.run(["code", str(destination)], check=True)
+                elif os.name == "nt":
+                    os.startfile(str(destination))
+                else:
+                    import sys
+                    subprocess.run(["open" if sys.platform == "darwin" else "xdg-open",
+                                    str(destination)], check=True)
+
+
+if __name__ == "__main__":
+    main()
+'''
 
 
 def get_canonical_version(repo_root: Path) -> str:
@@ -206,78 +283,11 @@ def validate_source_layout(source_root: Path) -> None:
             )
 
 
-def rewrite_markdown_paths(
-    text: str, target_relative: Path, source_root: Path | None = None
-) -> str:
-    """Relocate bundled references without assuming shell environment variables."""
-    agent_path = "com.github.copilot/agents/ENSDF-Agent.agent.md"
-    path_pattern = re.compile(
-        r"(?<![\w./\\-])(?:\./)?\.github[\\/]"
-        r"(?:(?:agents[\\/])?ENSDF-Agent\.agent\.md|copilot-instructions\.md|scripts[\\/](?=`)|"
-        r"(?:skills|skills-dormant|scripts|hooks)[\\/]"
-        r"[\w./\\-]*[\w.-])"
-    )
-    used_command_path = False
-    used_reference = False
-
-    def replace(match: re.Match[str]) -> str:
-        nonlocal used_command_path, used_reference
-        path = match.group().replace("\\", "/").removeprefix("./")
-        relative = path[len(".github/"):]
-        # Older source references use "group" for the renamed merge skill.
-        if (
-            relative == "skills/group-adopted-levels/SKILL.md"
-            and source_root is not None
-            and not (source_root / relative).is_file()
-            and (source_root / "skills" / "merge-adopted-levels" / "SKILL.md").is_file()
-        ):
-            relative = "skills/merge-adopted-levels/SKILL.md"
-        if relative in ("agents/ENSDF-Agent.agent.md", "ENSDF-Agent.agent.md", "copilot-instructions.md"):
-            target = agent_path
-        else:
-            target = plugin_relative_path(Path(relative)).as_posix()
-
-        before = text[:match.start()]
-        line = before.rsplit("\n", 1)[-1]
-        after = text[match.end():]
-        # A standalone inline-code path is a document reference; other script
-        # occurrences are command examples and need shell-safe quoting.
-        standalone = line.endswith("`") and after.startswith("`")
-        if relative.startswith("scripts/") and not standalone:
-            used_command_path = True
-            quoted = bool(line.endswith(('"', "'")) and after.startswith(line[-1]))
-            value = posixpath.relpath(target, target_relative.parent.as_posix())
-            return value if quoted else f'"{value}"'
-        used_reference = True
-        return posixpath.relpath(target, target_relative.parent.as_posix())
-
-    rewritten = path_pattern.sub(replace, text)
-    if used_command_path or used_reference:
-        if target_relative.parts[:2] == ("com.github.copilot", "agents"):
-            note = (
-                "\n\n> Use the installed ENSDF-Agent plugin files. If their location "
-                "is needed, load the `ensdf-level-record-format` skill and derive "
-                "the plugin root from its skill directory. Resolve bundled paths "
-                "relative to this agent file and quote command paths for the current "
-                "shell; keep the workspace as the working directory."
-            )
-        else:
-            note = (
-                "\n\n> Resolve bundled paths relative to this skill file's directory. "
-                "For commands, resolve script paths to absolute paths and quote them "
-                "for the current shell; keep the workspace as the working directory."
-            )
-        if used_command_path:
-            note += " Use the installed file location, not the workspace copy."
-        note += "\n"
-        # Keep frontmatter intact and put guidance before the first body heading.
-        if rewritten.startswith("---\n"):
-            end = rewritten.find("\n---", 4)
-            if end != -1:
-                insert = end + len("\n---")
-                return rewritten[:insert] + note + rewritten[insert:]
-        rewritten = note.lstrip("\n") + "\n" + rewritten
-    return rewritten
+def rewrite_markdown_paths(text: str, target_relative: Path) -> str:
+    """Preserve authored markdown, except a workstation-specific tool path."""
+    if target_relative == Path("skills-dormant/ens2pdf/SKILL.md"):
+        text = text.replace("D:\\X\\ND\\McMaster-MSU-Java-NDS\\", "${ENSDF_NDS_JAR}")
+    return text
 
 
 def rewrite_hook_script(text: str, relative: Path) -> str:
@@ -332,19 +342,80 @@ def rewrite_hook_script(text: str, relative: Path) -> str:
 
 
 def rewrite_bundled_script(text: str, relative: Path) -> str:
-    if relative == Path("scripts/ens2pdf.py") and 'ELEMENT = "Cl"' in text:
-        old = 'if __name__ == "__main__":\n    main()'
-        new = (
-            'if __name__ == "__main__":\n'
-            '    import sys\n'
-            '    if len(sys.argv) > 1:\n'
-            '        raise SystemExit("This source version of ens2pdf.py does not accept '
-            'command-line arguments; configure its paths and selection before running.")\n'
-            '    main()'
+    if relative == Path("scripts/ens2pdf.py"):
+        start = text.find("def main():\n")
+        if start < 0:
+            raise ValueError(f"Cannot adapt PDF conversion entry point in {relative}")
+        source_main = text[start:]
+        # Reject changes to the source entry point rather than silently discarding them.
+        if hashlib.sha256(source_main.encode("utf-8")).hexdigest() != PDF_SOURCE_MAIN_SHA256:
+            raise ValueError(f"PDF conversion entry point changed; update the portable adapter for {relative}")
+        text = text[:start]
+        text = re.sub(r"\(D:/X/ND/Files\)", "(the staging directory)", text)
+        text = text.replace("FILES = None", "FILES: list[str] | None = None", 1)
+        text, count = re.subn(
+            r'(?m)^ENSDF_ROOT = .*$|^OUTPUT_DIR = .*$|^JAR_GLOB\s+= .*$',
+            lambda match: {
+                "ENSDF_ROOT": 'ENSDF_ROOT = str(Path.cwd())',
+                "OUTPUT_DIR": 'OUTPUT_DIR = str(Path.cwd())',
+                "JAR_GLOB": 'JAR_GLOB = os.environ.get("ENSDF_NDS_JAR", "**/McMaster_MSU_JAVA_NDS_v*.jar")',
+            }[match.group().split("=")[0].strip()],
+            text,
+        )
+        if count != 3:
+            raise ValueError(f"Cannot adapt PDF tool paths in {relative}")
+        text += PORTABLE_PDF_MAIN
+    elif relative == Path("scripts/compare_line_metrics.py"):
+        text, count = re.subn(r"(?m)^DEFAULT_(?:OLD|NEW)_FILE = .*?$", "", text)
+        if count != 2:
+            raise ValueError(f"Cannot adapt comparison defaults in {relative}")
+        text, count = re.subn(
+            r'        nargs="\?",\n        default=DEFAULT_(?:OLD|NEW)_FILE,\n'
+            r'        help="Path to (old/original|new/edited) file \(optional; defaults to DEFAULT_(?:OLD|NEW)_FILE in this script\)",',
+            lambda match: f'        help="Path to {match.group(1)} file",',
+            text,
+        )
+        if count != 2:
+            raise ValueError(f"Cannot adapt comparison arguments in {relative}")
+        old = 'def compare_object_counts(old_path: Path, new_path: Path) -> tuple[int, int, int, str]:\n'
+        new = old + (
+            '    import shutil\n'
+            '    if not shutil.which("powershell"):\n'
+            '        total, removed, added = powershell_style_counts(read_lines(old_path), read_lines(new_path))\n'
+            '        return total, removed, added, "CounterFallback (PowerShell unavailable)"\n'
         )
         if text.count(old) != 1:
-            raise ValueError(f"Cannot guard unsupported ens2pdf arguments in {relative}: source changed")
-        return text.replace(old, new)
+            raise ValueError(f"Cannot adapt comparison execution in {relative}")
+        text = text.replace(old, new)
+    elif relative == Path("scripts/Java_FormatCheck.py"):
+        text, count = re.subn(
+            r'    candidates = glob\.glob\(r"[^"\n]+"\)',
+            '    configured = os.environ.get("ENSDF_FORMATCHECK_JAR")\n'
+            '    candidates = [configured] if configured else glob.glob("**/FormatCheck_*.jar", recursive=True)',
+            text, count=1,
+        )
+        if count != 1:
+            raise ValueError(f"Cannot adapt FormatCheck JAR discovery in {relative}")
+        text, count = re.subn(
+            r'(?m)^FILES_DIR = .*$',
+            'FILES_DIR = os.environ.get("ENSDF_FORMATCHECK_OUTPUT_DIR", str(Path.cwd() / ".github" / "temp" / "formatcheck"))',
+            text,
+        )
+        if count != 1:
+            raise ValueError(f"Cannot adapt FormatCheck output in {relative}")
+        text = re.sub(r"(?m)^    Generates .*formatcheck\.fmt$", "    Generates a formatcheck.fmt report in FILES_DIR.", text)
+        text = re.sub(r'(?m)^        print\("Error: Could not find FormatCheck jar\..*$', '        print("Error: Set ENSDF_FORMATCHECK_JAR to an existing FormatCheck JAR, or place it in the workspace.")', text)
+        text = re.sub(r'(?m)^        print\("  - Output is written to .*$', '        print(f"  - Output is written to {OUTPUT_FILE}")', text)
+        text = text.replace("python .github/Java_FormatCheck.py", "python Java_FormatCheck.py")
+    elif relative == Path("scripts/column_calibrate.py"):
+        text = text.replace(
+            'print("  Run: python .github/fix_ri_positioning.py \\"filename.ens\\"")',
+            'print("  Run the bundled fix_ri_m_columns.py on the affected file.")',
+        )
+    elif relative == Path("scripts/check_gamma_ordering.py"):
+        text = text.replace(".github/check_gamma_ordering.py", "check_gamma_ordering.py")
+    elif relative == Path("scripts/scan_editorial_review.py"):
+        text = text.replace(".github/scripts/scan_editorial_review.py", "scan_editorial_review.py")
     return text
 
 
@@ -357,21 +428,46 @@ def validate_portable_text(text: str, relative: Path) -> None:
             raise ValueError(f"Unresolved plugin-root placeholder in {relative}:{line_number}")
 
 
+def workspace_dependencies(source_root: Path) -> list[str]:
+    """Find workspace-relative references in authored instructions."""
+    references: set[str] = set()
+    pattern = re.compile(
+        r"\.github[\\/](?:(?:scripts|agents|skills|skills-dormant)[\\/][\w./\\-]+"
+        r"|copilot-instructions\.md)"
+    )
+    files = [
+        source_root / "agents" / "ENSDF-Agent.agent.md",
+        source_root / "copilot-instructions.md",
+    ]
+    files.extend(
+        source_root / relative
+        for relative in iter_managed_source_files(source_root)
+        if relative.parts[0] in {"skills", "skills-dormant"} and relative.suffix.lower() == ".md"
+    )
+    for path in files:
+        if path.is_file():
+            references.update(
+                match.group(0).replace("\\", "/").rstrip(".")
+                for match in pattern.finditer(path.read_text(encoding="utf-8"))
+            )
+    return sorted(references)
+
+
 def build_managed_content(source_root: Path, relative: Path) -> str | None:
     source_path = source_root / relative
     target_relative = plugin_relative_path(relative)
     if relative.suffix.lower() == ".md":
-        text = rewrite_markdown_paths(source_path.read_text(encoding="utf-8"), target_relative, source_root)
-        if relative == Path("skills-dormant/ens2pdf/SKILL.md"):
-            text = re.sub(
-                r"(?m)^- The Java tool must be present at `[^`]+`\.",
-                "- The McMaster-MSU Java NDS JAR and Java must be available; specify the JAR with `--jar` or `ENSDF_NDS_JAR`.",
-                text,
-            )
+        original = source_path.read_text(encoding="utf-8")
+        text = rewrite_markdown_paths(original, target_relative)
+        validate_portable_text(text, relative)
+        if text == original:
+            return None
     elif relative.parts[:2] == ("hooks", "scripts") and relative.suffix == ".py":
         text = rewrite_hook_script(source_path.read_text(encoding="utf-8"), relative)
     elif relative.suffix == ".py" and relative.parts[0] == "scripts":
         text = rewrite_bundled_script(source_path.read_text(encoding="utf-8"), relative)
+    elif relative.suffix.lower() in {".py", ".sh", ".ps1", ".js", ".cjs", ".mjs", ".json", ".yaml", ".yml", ".toml"}:
+        text = source_path.read_text(encoding="utf-8")
     else:
         return None
     validate_portable_text(text, relative)
@@ -460,8 +556,7 @@ def rewrite_plugin_hook_path(command: str) -> str:
         if path.startswith("./"):
             path = path[2:]
         rewritten = "${PLUGIN_ROOT}/com.github.copilot/hooks/" + path[len(".github/hooks/"):]
-        quote = match.group("quoted")
-        return f"{quote}{rewritten}{quote}" if quote else f'"{rewritten}"'
+        return f'"{rewritten}"'
 
     return source_path.sub(replace, command)
 
@@ -531,7 +626,7 @@ def _decode_hook_string_scalar(value: str) -> tuple[str, str] | None:
 def _rewrite_hook_command_line(line: str, field_indent: int) -> tuple[str, bool]:
     """Rewrite one hook executable field; report whether it starts a block scalar."""
     match = re.match(
-        r"^(?P<indent>[ \t]*)(?P<key>command|exec|bash|powershell|windows|linux|osx):"
+        r"^(?P<indent>[ \t]*)(?P<key>command|exec|cwd|bash|powershell|windows|linux|osx):"
         r"(?P<spacing>[ \t]*)(?P<value>.*?)(?P<newline>\r?\n)?$",
         line,
     )
@@ -549,7 +644,7 @@ def _rewrite_hook_command_line(line: str, field_indent: int) -> tuple[str, bool]
     if decoded is None:
         return line, True
     value, suffix = decoded
-    if key == "exec":
+    if key in {"exec", "cwd"}:
         rewritten = rewrite_plugin_hook_executable(value)
     else:
         rewritten = rewrite_plugin_hook_path(value)
@@ -597,17 +692,46 @@ def rewrite_agent_hook_block(agent_text: str) -> str:
     )
     current_field_indent = None
     args_indent = None
+    env_indent = None
     index = hooks_start + 1
     while index < hooks_end:
         line = lines[index]
         indent = len(line) - len(line.lstrip())
         if args_indent is not None and line.strip() and indent <= args_indent:
             args_indent = None
+        if env_indent is not None and line.strip() and indent <= env_indent:
+            env_indent = None
         item_match = re.match(r"^(?P<indent>[ \t]*)-\s+type:", lines[index])
         if item_match:
             current_field_indent = len(item_match.group("indent")) + 2
 
         if current_field_indent is not None:
+            env_match = re.match(r"^(?P<indent>[ \t]*)env:[ \t]*(?:#.*)?(?:\r?\n)?$", line)
+            if env_match and len(env_match.group("indent")) == current_field_indent:
+                env_indent = current_field_indent
+                index += 1
+                continue
+            env_value = re.match(
+                r"^(?P<indent>[ \t]*)(?P<key>[A-Za-z_][A-Za-z0-9_]*):"
+                r"(?P<spacing>[ \t]*)(?P<value>.*?)(?P<newline>\r?\n)?$",
+                line,
+            )
+            if env_indent is not None and env_value and len(env_value.group("indent")) > env_indent:
+                raw = env_value.group("value")
+                if ".github" in raw and "hooks" in raw:
+                    decoded = _decode_hook_string_scalar(raw)
+                    if decoded is None:
+                        raise ValueError(f"Unsupported block scalar in hook environment: {line!r}")
+                    value, suffix = decoded
+                    rewritten = rewrite_plugin_hook_executable(value)
+                    if rewritten != value:
+                        lines[index] = (
+                            f"{env_value.group('indent')}{env_value.group('key')}:"
+                            f"{env_value.group('spacing')}{json.dumps(rewritten)}"
+                            f"{suffix}{env_value.group('newline') or ''}"
+                        )
+                index += 1
+                continue
             args_match = re.match(
                 r"^(?P<indent>[ \t]*)args:[ \t]*(?P<value>.*?)(?P<newline>\r?\n)?$",
                 line,
@@ -655,7 +779,7 @@ def rewrite_agent_hook_block(agent_text: str) -> str:
             if is_block:
                 block_indent = current_field_indent
                 field_match = re.match(
-                    r"^[ \t]*(?P<key>command|exec|bash|powershell|windows|linux|osx):",
+                    r"^[ \t]*(?P<key>command|exec|cwd|bash|powershell|windows|linux|osx):",
                     lines[index],
                 )
                 field_key = field_match.group("key") if field_match else "command"
@@ -667,7 +791,7 @@ def rewrite_agent_hook_block(agent_text: str) -> str:
                     newline = "\r\n" if block_line.endswith("\r\n") else "\n" if block_line.endswith("\n") else ""
                     content = block_line[:len(block_line) - len(block_line.lstrip())]
                     command = block_line[len(content):].removesuffix(newline)
-                    if field_key == "exec":
+                    if field_key in {"exec", "cwd"}:
                         rewritten_command = rewrite_plugin_hook_executable(command)
                     else:
                         rewritten_command = rewrite_plugin_hook_path(command)
@@ -678,7 +802,11 @@ def rewrite_agent_hook_block(agent_text: str) -> str:
                 continue
         index += 1
 
-    return "".join(lines)
+    rewritten_text = "".join(lines)
+    remaining = "".join(lines[hooks_start:hooks_end])
+    if re.search(r"\.github[\\/]+hooks[\\/]", remaining):
+        raise ValueError("Unsupported source hook path remains in agent frontmatter")
+    return rewritten_text
 
 
 def remove_plugin_wide_hook_config(plugin_root: Path, dry_run: bool) -> None:
@@ -750,7 +878,6 @@ def inject_agent_version(agent_text: str, version: str) -> str:
 def build_merged_agent_content(
     agent_text: str,
     instructions_text: str,
-    version: str | None = None,
 ) -> str:
     """Build the full plugin agent-file content from current source content.
 
@@ -762,9 +889,7 @@ def build_merged_agent_content(
     Three things happen to agent_text before it's used:
       1. Agent-scoped hooks are retained in place; only bundled hook script
          paths are rewritten to use the plugin root.
-      2. If ``version`` is supplied, it is injected into frontmatter
-         (description, argument-hint) and title via inject_agent_version().
-      3. instructions_text (copilot-instructions.md) is appended as a
+      2. instructions_text (copilot-instructions.md) is appended as a
          clearly labeled section, since VS Code Agent Plugins do not support
          shipping that file standalone alongside an agent.
     If instructions_text is empty (e.g. the source file was deleted), the
@@ -773,11 +898,8 @@ def build_merged_agent_content(
     rewritten_agent = rewrite_agent_hook_block(agent_text)
     if _agent_hook_record_count(agent_text) != _agent_hook_record_count(rewritten_agent):
         raise ValueError("Rewriting hook paths changed the agent's hook entry count")
-    target = Path("com.github.copilot/agents/ENSDF-Agent.agent.md")
-    rewritten_agent = rewrite_markdown_paths(rewritten_agent, target).rstrip("\n")
-    if version:
-        rewritten_agent = inject_agent_version(rewritten_agent, version).rstrip("\n")
-    instructions_body = rewrite_markdown_paths(instructions_text, target).strip("\n")
+    rewritten_agent = rewritten_agent.rstrip("\n")
+    instructions_body = instructions_text.strip("\n")
 
     sections = [rewritten_agent]
     if instructions_body:
@@ -792,15 +914,14 @@ def build_merged_agent_content(
 def sync_agent_file(
     source_root: Path,
     plugin_root: Path,
-    version: str | None = None,
     dry_run: bool = False,
 ) -> None:
     """Generate the single Copilot agent and remove its legacy duplicate.
 
     Reads source agents/ENSDF-Agent.agent.md + copilot-instructions.md fresh
     every run and rebuilds the merged output via build_merged_agent_content(),
-    which rewrites and retains agent-scoped hooks, injects the canonical
-    version, and appends the instructions file as a labeled section. The result is compared
+    which rewrites and retains agent-scoped hooks and appends the instructions
+    file as a labeled section. The result is compared
     verbatim (full-text equality) against existing plugin files to decide
     COPIED/SKIP; there is no partial/section-level patch.
 
@@ -832,7 +953,6 @@ def sync_agent_file(
     merged = build_merged_agent_content(
         agent_text,
         instructions_text,
-        version,
     )
 
     remove_plugin_wide_hook_config(plugin_root, dry_run)
@@ -1028,12 +1148,21 @@ def main() -> int:
         if (source_root / "copilot-instructions.md").is_file() else "",
     )
     validate_portable_text(agent_content, Path("com.github.copilot/agents/ENSDF-Agent.agent.md"))
+    dependencies = workspace_dependencies(source_root)
+    if dependencies:
+        print(
+            "WARNING: Authored agent/skill instructions reference workspace files; "
+            "plugin installation does not create these paths:"
+        )
+        for dependency in dependencies:
+            print(f"  {dependency}")
+        print()
     if not args.no_bump:
-        version = bump_versions(repo_root, args.bump, args.dry_run)
+        bump_versions(repo_root, args.bump, args.dry_run)
     else:
-        version = get_canonical_version(repo_root)
+        get_canonical_version(repo_root)
     sync_readme(repo_root, plugin_root, args.dry_run)
-    sync_agent_file(source_root, plugin_root, version, args.dry_run)
+    sync_agent_file(source_root, plugin_root, args.dry_run)
     return sync(source_root, plugin_root, args.dry_run)
 
 

@@ -6,7 +6,7 @@ in .github/skills/editorial-review-guidelines/SKILL.md. Reports findings
 grouped by file; never edits files.
 
 Usage:
-  python .github/scripts/scan_editorial_review.py [PATH] [--skip PAT ...]
+  python scan_editorial_review.py [PATH] [--skip PAT ...]
 
 PATH:  an .ens file or a folder (scans *.ens). Default: current folder.
 --skip: exclude filenames containing any PAT (e.g. --skip adopted).

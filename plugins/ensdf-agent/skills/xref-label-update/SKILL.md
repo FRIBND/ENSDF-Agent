@@ -7,12 +7,9 @@ description: >
 argument-hint: "[adopted.ens] [add|remove] [dataset-label]"
 ---
 
-> Bundled relative paths are relative to this file.
-
-
 # Update ENSDF Cross-Reference (XREF) Labels
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 ## Scenario 1: Add Dataset(s)
 

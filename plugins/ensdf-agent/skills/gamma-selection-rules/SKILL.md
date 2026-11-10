@@ -9,17 +9,14 @@ description: >
   intersection.
 ---
 
-> Bundled relative paths are relative to this file.
-
-
 # Gamma Transition Selection Rules: Deducing Multipolarities and Jπ
 
-- ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
-- Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
+- ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`.
+- Spot-check policy: `.github/copilot-instructions.md`.
 - γ-ray multipolarity selection rules: `.github/docs/gamma_selection_rules.md`.
 - DCO and ADO interpretation rules: `.github/docs/angular_correlations_DCO.md`.
 - γ-ray angular distribution, mixing ratios, and polarization: `.github/docs/gamma_angular_distribution_mixing_ratio_polarization.md`.
-- M and MR field notation: `../multipolarity-mixing-ratio/SKILL.md`.
+- M and MR field notation: `.github/skills/multipolarity-mixing-ratio/SKILL.md`.
 
 ---
 

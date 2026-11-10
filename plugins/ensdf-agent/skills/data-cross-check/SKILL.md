@@ -3,14 +3,11 @@ name: data-cross-check
 description: "Checks target data in ENS files against source data for exact consistency. Use when validating target data in ENS files against source data from CSV, Markdown, MRG, ENS, or ADP files, including values, uncertainties, signs, limits, decimal digits, units, provenance comments, strings, XREFs, and completeness."
 ---
 
-> Bundled relative paths are relative to this file.
-
-
 # Data Cross-Check
 
 Verify 100% consistency between source data and target `.ens` data. Report every mismatch.
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 Actively leverage coding, scripts, and programming tools when necessary to effectively deliver your data tasks.
 
@@ -57,7 +54,7 @@ Actively leverage coding, scripts, and programming tools when necessary to effec
 - [ ] 4. Carefully match data items between source and target
 - [ ] 5. Compare item-by-item source against target
 - [ ] 6. Identify mismatches.
-- [ ] 7. Run reproducible 15% random spot-check (`../../com.github.copilot/agents/ENSDF-Agent.agent.md` § Random Spot Check)
+- [ ] 7. Run reproducible 15% random spot-check (`.github/copilot-instructions.md` § Random Spot Check)
 - [ ] 8. Report all mismatches with locations
 ```
 
@@ -65,7 +62,7 @@ Actively leverage coding, scripts, and programming tools when necessary to effec
 
 - Never match a gamma by Eγ alone; match gamma's L-record first. For near-equal energies, use both level energy and transition energy for accurate matching.
 - Source of truth is only the designated source. When source and target disagree, the source wins; report the target value as a mismatch instead of justifying it.
-- Numerical Exactness: see `../../com.github.copilot/agents/ENSDF-Agent.agent.md` § Numerical Exactness.
+- Numerical Exactness: see `.github/agents/ENSDF-Agent.agent.md` § Numerical Exactness.
 
 
 ## Report Output

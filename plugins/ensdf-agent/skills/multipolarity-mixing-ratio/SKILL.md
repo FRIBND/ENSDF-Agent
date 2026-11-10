@@ -7,12 +7,9 @@ description: >
 argument-hint: "[multipolarity (M) and mixing ratio (MR) of gamma (G-record)]"
 ---
 
-> Bundled relative paths are relative to this file.
-
-
 # ENSDF Multipolarity and Mixing Ratio Reference
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 ## Multipolarity Field (M Field, Columns 33-41)
 

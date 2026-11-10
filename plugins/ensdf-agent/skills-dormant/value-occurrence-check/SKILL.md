@@ -10,9 +10,6 @@ description: >
 argument-hint: [CSV, Markdown, or pipe table file]
 ---
 
-> Bundled relative paths are relative to this file.
-
-
 # Value Occurrence Check
 
 ## Purpose
@@ -30,7 +27,7 @@ Verify that every nuclear level energy appearing multiple times in a gamma-ray t
 
 ### Step 1: Column Mapping
 
-Follow the bidirectional column mapping protocol from `../../com.github.copilot/agents/ENSDF-Agent.agent.md` § Bidirectional Positional Check:
+Follow the bidirectional column mapping protocol from `.github/agents/ENSDF-Agent.agent.md` § Bidirectional Positional Check:
 
 1. List all header columns explicitly, including blank positions
 2. Count blank cells as positional placeholders

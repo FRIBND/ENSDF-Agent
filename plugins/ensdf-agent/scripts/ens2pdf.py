@@ -6,7 +6,7 @@ HOW TO USE:
   2. Click the Run Python File button in VS Code.  Done.
 
 OUTPUT:
-  • Java NDS writes ALL its output files to OUTPUT_DIR (D:/X/ND/Files).
+  • Java NDS writes ALL its output files to OUTPUT_DIR (the staging directory).
     Nothing in that folder is touched or deleted by this script.
   • The generated PDF(s) are moved to the element's pdf/ folder.
 """
@@ -29,15 +29,15 @@ MASS    = 35     # Mass number, e.g. 34, 35, 36, 60
 # FILES: None  → convert ALL .ens files for the element
 #        list  → convert only the named datasets (without .ens extension)
 # Example: FILES = ["Cl35_34s_p_g", "Cl35_adopted"]
-FILES = None
+FILES: list[str] | None = None
 
 # =============================================================================
 # PATHS — adjust only if your folder layout is different
 # =============================================================================
 
-ENSDF_ROOT = r"D:\X\ND\ENSDF"
-OUTPUT_DIR = r"D:\X\ND\Files"   # Java NDS writes all outputs here; PDFs are moved out afterwards
-JAR_GLOB   = r"D:\X\ND\McMaster-MSU-Java-NDS\McMaster_MSU_JAVA_NDS_v*.jar"
+ENSDF_ROOT = str(Path.cwd())
+OUTPUT_DIR = str(Path.cwd())
+JAR_GLOB = os.environ.get("ENSDF_NDS_JAR", "**/McMaster_MSU_JAVA_NDS_v*.jar")
 
 # =============================================================================
 # SCRIPT — no need to edit below this line
@@ -142,47 +142,78 @@ def move_all_pdfs(generated: list, dest_dir: Path, max_wait_s: int = 300):
 
 
 
+
 def main():
-    jar      = find_jar()
-    out_dir  = Path(OUTPUT_DIR)
-    dest_dir = pdf_dest_dir()
+    import argparse
+    import fnmatch
+    import tempfile
 
-    print(f"JAR  : {jar}")
-    print(f"Stage: {out_dir}")
-    print(f"PDF  : {dest_dir}")
-
-    files = ens_files_to_convert()
+    parser = argparse.ArgumentParser(description="Convert workspace ENSDF files to PDF.")
+    parser.add_argument("input", help="ENSDF file, dataset name, element, or glob")
+    parser.add_argument("--jar", default=os.environ.get("ENSDF_NDS_JAR"),
+                        help="McMaster-MSU Java NDS JAR (or set ENSDF_NDS_JAR)")
+    parser.add_argument("--open", action="store_true", help="Open generated PDFs")
+    parser.add_argument("--system", action="store_true", help="Use the system PDF viewer")
+    args = parser.parse_args()
+    workspace = Path.cwd()
+    if args.jar:
+        jar = Path(args.jar).expanduser().resolve()
+        if not jar.is_file():
+            parser.error(f"Java NDS JAR not found: {jar}")
+    else:
+        jars = sorted(workspace.rglob("McMaster_MSU_JAVA_NDS_v*.jar"))
+        if len(jars) != 1:
+            parser.error("Provide the Java NDS JAR using --jar or ENSDF_NDS_JAR.")
+        jar = jars[0].resolve()
+    if not shutil.which("java"):
+        parser.error("Java executable not found on PATH.")
+    supplied = Path(args.input).expanduser()
+    if supplied.is_file():
+        files = [supplied.resolve()]
+    else:
+        pattern = args.input.replace("\\", "/")
+        if not pattern.lower().endswith(".ens"):
+            pattern += "*.ens" if pattern.isalpha() else ".ens"
+        files = sorted(
+            path.resolve() for path in workspace.rglob("*.ens")
+            if fnmatch.fnmatch(path.name.casefold(), pattern.casefold())
+            or fnmatch.fnmatch(path.relative_to(workspace).as_posix().casefold(), pattern.casefold())
+        )
     if not files:
-        print("No .ens files to convert.")
-        return
-
-    # ── Step 1: convert ALL files first ──────────────────────────────────────
-    # Every Java process runs to completion before we touch any PDF.
-    # Java may open a PDF viewer window; users can close them at any time —
-    # no window interaction is required to proceed.
-    print(f"\nStep 1 — converting {len(files)} file(s) for {ELEMENT}{MASS}:")
-    generated = []   # list of (src_pdf_in_stage, dst_pdf_in_pdf_folder)
-    for ens in files:
-        pdf = run_java(ens, jar, out_dir)
-        if pdf is not None:
-            generated.append((pdf, dest_dir / pdf.name))
-
-    # ── Step 2: move ALL produced PDFs at once ────────────────────────────────
-    # Loops over all pending files every 1 s.  As the user closes PDF viewer
-    # windows the moves happen automatically — no specific order required.
-    print(f"\nStep 2 — moving {len(generated)} PDF(s) to {dest_dir}:")
-    move_all_pdfs(generated, dest_dir)
-
-    moved = sum(1 for _, dst in generated if dst.exists())
-    print(f"\nDone. {moved}/{len(files)} PDF(s) in {dest_dir}")
-
-
+        parser.error(f"No ENSDF files match: {args.input}")
+    destinations = []
+    for path in files:
+        parent = path.parent.parent if path.parent.name.lower() == "new" else path.parent
+        destinations.append(parent / "pdf" / (path.stem + ".pdf"))
+    if len(set(destinations)) != len(destinations):
+        parser.error("Selected files would produce duplicate PDF paths.")
+    existing = [path for path in destinations if path.exists()]
+    if existing:
+        parser.error(f"PDF already exists; refusing to overwrite: {existing[0]}")
+    with tempfile.TemporaryDirectory(prefix="ensdf-pdf-") as temp:
+        generated = []
+        for index, (source, destination) in enumerate(zip(files, destinations)):
+            staging = Path(temp) / str(index)
+            staging.mkdir()
+            pdf = run_java(source, str(jar), staging)
+            if pdf is None:
+                raise SystemExit(f"PDF conversion failed: {source}")
+            generated.append((pdf, destination))
+        for pdf, destination in generated:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            move_all_pdfs([(pdf, destination)], destination.parent)
+            if not destination.is_file():
+                raise SystemExit(f"Could not move generated PDF to {destination}")
+            if args.open:
+                if not args.system and shutil.which("code"):
+                    subprocess.run(["code", str(destination)], check=True)
+                elif os.name == "nt":
+                    os.startfile(str(destination))
+                else:
+                    import sys
+                    subprocess.run(["open" if sys.platform == "darwin" else "xdg-open",
+                                    str(destination)], check=True)
 
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1:
-        raise SystemExit("This source version of ens2pdf.py does not accept command-line arguments; configure its paths and selection before running.")
     main()
-
-

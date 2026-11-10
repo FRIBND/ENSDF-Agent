@@ -50,6 +50,7 @@ The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/r
 
 - **Python 3** on PATH — hooks and ENSDF validation scripts require it.
 - Windows users: Python must be invokable as `python` from terminal.
+- PDF export and FormatCheck require Java and their respective Java tool JARs.
 
 
 ## Troubleshooting

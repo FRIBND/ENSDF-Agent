@@ -11,12 +11,9 @@ description: >
 argument-hint: [ENSDF file or reaction type]
 ---
 
-> Bundled relative paths are relative to this file.
-
-
 # Nuclear Reaction Equation Formatting for ENSDF
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 ## Purpose
 

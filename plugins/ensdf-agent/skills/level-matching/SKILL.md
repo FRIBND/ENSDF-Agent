@@ -8,12 +8,9 @@ description: >
 argument-hint: "[source.ens] [adopted.ens]"
 ---
 
-> Bundled relative paths are relative to this file.
-
-
 # Level Matching: Individual Dataset vs. Adopted
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 ## Configuration
 
@@ -79,8 +76,8 @@ Three sections (read-only; no file edits). Script: `.github/temp/match_levels.py
 | `!!`, possible match (Δ near threshold) | Likely different levels; raise `BASELINE_KEV` or flag unmatched |
 | Many new source levels in a region | Adopted incomplete for that excitation range |
 | Adopted-only, high-spin or blank Jπ | Inaccessible to this reaction type, or fine-grained resonance levels |
-| One adopted L-record wrongly grouped multiple datasets' levels | Split: `../split-adopted-levels/SKILL.md` |
-| One physical level is wrongly split into multiple adopted L-records | Group: `../merge-adopted-levels/SKILL.md` |
+| One adopted L-record wrongly grouped multiple datasets' levels | Split: `.github/skills/split-adopted-levels/SKILL.md` |
+| One physical level is wrongly split into multiple adopted L-records | Group: `.github/skills/group-adopted-levels/SKILL.md` |
 
 ## Pitfalls
 

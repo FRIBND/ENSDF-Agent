@@ -10,12 +10,9 @@ description: >
 argument-hint: [space-separated list of mass numbers, e.g. 204 207 208 211 212]
 ---
 
-> Bundled relative paths are relative to this file.
-
-
 # NDS DOI Lookup Skill
 
-ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
+ENSDF 80-column data record and field definitions, structural rules, column positions, and uncertainty notation: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 ## Critical Rule: NNDC EvaluationIndexServlet Is the ONLY Ground Truth
 

@@ -8,12 +8,9 @@ description: >
   validation in Nuclear Data Sheets manuscripts.
 ---
 
-> Bundled relative paths are relative to this file. Plugin command paths use `<plugin-root>` as a placeholder, not an environment variable. Find the installed directory containing `plugin.json`, replace the placeholder with its absolute path, and quote/escape the full path for the shell in use before executing. The workspace remains the working directory for data files.
-
-
 # ENSDF Editorial Review Skill
 
-Column/field rules: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`. Spot-check policy: `../../com.github.copilot/agents/ENSDF-Agent.agent.md`.
+Column/field rules: `.github/agents/ENSDF-Agent.agent.md`. Spot-check policy: `.github/copilot-instructions.md`.
 
 **Scope:** `c`, `cL`, `cG`, `cB`, `cE`, `cN`, `cP`, `cQ` comment records and continuation comment lines. Skip data-record fields (`L`, `G`, `E`, `B`, `DP`).
 **Action Policy:** Two options: (1) Check only. Report findings table. No edits or revisions. (2) Check and revise. Report findings table, then apply edits to comment lines.
@@ -141,7 +138,7 @@ Missing terminal periods, XREF notation. Valid ENSDF symbols: `|?`, `{+n}`, `{-n
 
 ## Procedure
 
-1. Run `python "<plugin-root>/scripts/scan_editorial_review.py" [folder_or_file] --skip adopted` — automated sweeps (isotope tokens, bare `I`, braced `{I}`, units, chemical formulas, dittography, `$`/`=` space, `10{-n}`, unicode, leaked tags, spelling). Review every flagged line; discard false positives manually. The glob is one level deep: pass the folder that directly holds the `.ens` files, not its parent.
+1. Run `python .github/scripts/scan_editorial_review.py [folder_or_file] --skip adopted` — automated sweeps (isotope tokens, bare `I`, braced `{I}`, units, chemical formulas, dittography, `$`/`=` space, `10{-n}`, unicode, leaked tags, spelling). Review every flagged line; discard false positives manually. The glob is one level deep: pass the folder that directly holds the `.ens` files, not its parent.
 2. Apply error classes in order: notation → grammar → punctuation → hyphenation → terminology → integrity → clarity.
 3. Manually scan the remaining lines for regex-missed issues (dense prose, capitalization, subject-verb, hyphenation) per the Error Classes above.
 4. Final symbol sweep on all flagged lines: verify no raw Unicode glyphs, plain isotope tokens, mixed symbol-text compounds, or un-subscripted chemical formulas were missed.

@@ -1459,7 +1459,7 @@ def validate_ri_field(filename):
         print(f"[ERROR] ERRORS: {ri_errors} RI field positioning errors found!")
         print()
         print("CRITICAL FIX NEEDED:")
-        print("  Run: python .github/fix_ri_positioning.py \"filename.ens\"")
+        print("  Run the bundled fix_ri_m_columns.py on the affected file.")
         print("  Or manually insert space at column 22 for each error")
         print()
         return False
