@@ -43,7 +43,7 @@ Developed and refined through daily evaluation tasks at FRIB Nuclear Data Group.
 Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copilot, **ENSDF-Agent** employs Harness Engineering and Semantic Structuring to orchestrate an evaluator-in-the-loop agentic workflow.
 
 ## Development Timeline
-- 2026-11-10: **ENSDF-Agent** was migrated to be compatible with Copilot Harness.
+- 2026-11-10: **ENSDF-Agent** was migrated to be fully compatible with Copilot Harness. Recommended settings were shipped to users with the plugin.
 - 2026-10-21: **ENSDF-Agent** was demonstrated at 26th Technical Meeting of the International Network of Nuclear Structure and Decay Data Evaluators (NSDD) at MSU.
 - 2026-09-17: Guard-edit Hook was introduced to resolve AI-human concurrent editing conflicts.
 - 2026-08-13: **ENSDF-Agent** Harness was introduced at the 2026 Low Energy Community Meeting at ANL.
