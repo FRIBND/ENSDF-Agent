@@ -1,0 +1,51 @@
+{
+  "github.copilot.chat.agent.enabled": true,
+  "chat.useAgentSkills": true,
+  "chat.useCustomAgentHooks": true,
+  "chat.plugins.enabled": true,
+  "files.associations": {
+    "*.ens": "log",
+    "*.new": "log",
+    "*.old": "log",
+    "*.adp": "log",
+    "*.avg": "log",
+    "*.mrg": "log",
+    "*.gam": "log",
+    "*.lev": "log",
+    "*.fed": "log",
+    "*.fmt": "log",
+    "*.xrf": "log",
+    "*.wrn": "log",
+    "*.err": "log",
+    "*.rpt": "log",
+    "*.xundl": "log",
+    "*.trans": "log",
+    "*.out": "log",
+    "*.UPDATED": "log"
+  },
+  "[log]": {
+    "editor.wordWrap": "on",
+    "editor.renderWhitespace": "all",
+    "editor.guides.indentation": true,
+    "editor.rulers": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      19,
+      21,
+      29,
+      31,
+      39,
+      41,
+      49,
+      55,
+      64,
+      74,
+      76,
+      77,
+      80
+    ]
+  }
+}

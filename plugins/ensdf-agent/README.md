@@ -20,6 +20,9 @@ It jumps to Extensions: Agent Plugins panel for no reason, but the installation 
 
 Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace).
 
+Open **Preferences: Open User Settings (JSON)** in VS Code and copy the desired json commands from `vscode-settings.json` shipped with the plugin.
+
+
 ## Overview
 
 The first Agent designed for Evaluated Nuclear Structure Data File (ENSDF) workflows.
@@ -36,6 +39,7 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 | `com.github.copilot/agents/` | ENSDF-Agent definition |
 | `com.github.copilot/hooks/scripts/` | Hook scripts used by ENSDF-Agent |
 | `scripts/` | ENSDF processing and validation scripts |
+| `vscode-settings.json` | Recommended VS Code settings |
 | `skills/` | Skills available to the agent |
 | `skills-dormant/` | Additional skills not loaded automatically |
 

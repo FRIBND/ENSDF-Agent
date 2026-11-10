@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
@@ -57,6 +58,19 @@ version_files = [
     Path("plugins/ensdf-agent/plugin.json"),  # canonical source
     Path(".github/plugin/marketplace.json"),
 ]
+
+VSCODE_BOOLEAN_SETTINGS = (
+    "github.copilot.chat.agent.enabled",
+    "chat.useAgentSkills",
+    "chat.useCustomAgentHooks",
+    "chat.plugins.enabled",
+)
+ENSDF_FILE_PATTERNS = frozenset(
+    f"*.{suffix}" for suffix in (
+        "ens", "new", "old", "adp", "avg", "mrg", "gam", "lev", "fed",
+        "fmt", "xrf", "wrn", "err", "rpt", "xundl", "trans", "out", "UPDATED",
+    )
+)
 
 PDF_SOURCE_MAIN_SHA256 = "36c91c8c52106757652314a51e98aa937ad7cbbcae092a980a3ae77fe887678b"
 PORTABLE_PDF_MAIN = '''
@@ -212,6 +226,101 @@ def sync_compat_manifest(plugin_root: Path, dry_run: bool, planned_version: str 
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
         print("COPIED .plugin/plugin.json")
+
+
+def default_vscode_settings_path() -> Path:
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            raise ValueError("APPDATA is not set; specify --settings-file.")
+        return Path(appdata) / "Code" / "User" / "settings.json"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Code" / "User" / "settings.json"
+    return Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "Code" / "User" / "settings.json"
+
+
+def build_vscode_settings(source: Path) -> str:
+    """Extract only portable ENSDF-related settings from VS Code JSONC."""
+    text = source.read_text(encoding="utf-8-sig")
+    strings_and_comments = re.compile(r'"(?:\\.|[^"\\])*"|//[^\r\n]*|/\*[\s\S]*?\*/')
+    text = strings_and_comments.sub(
+        lambda match: match.group() if match.group().startswith('"') else " ",
+        text,
+    )
+    strings_and_trailing_commas = re.compile(r'"(?:\\.|[^"\\])*"|,(?=\s*[}\]])')
+    text = strings_and_trailing_commas.sub(
+        lambda match: match.group() if match.group().startswith('"') else "",
+        text,
+    )
+
+    def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"Duplicate key in VS Code settings: {key}")
+            result[key] = value
+        return result
+
+    settings = json.loads(text, object_pairs_hook=unique_object)
+    if not isinstance(settings, dict):
+        raise ValueError("VS Code settings must be a JSON object.")
+    selected: dict[str, object] = {}
+    for key in VSCODE_BOOLEAN_SETTINGS:
+        if key in settings:
+            value = settings[key]
+            if not isinstance(value, bool):
+                raise ValueError(f"VS Code setting must be boolean: {key}")
+            selected[key] = value
+    associations = settings.get("files.associations", {})
+    if not isinstance(associations, dict):
+        raise ValueError("VS Code files.associations must be an object.")
+    filtered_associations = {}
+    for key, value in associations.items():
+        if key in ENSDF_FILE_PATTERNS:
+            if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,40}", value):
+                raise ValueError(f"Invalid language identifier for {key}")
+            filtered_associations[key] = value
+    if filtered_associations:
+        selected["files.associations"] = filtered_associations
+    log_settings = settings.get("[log]", {})
+    if not isinstance(log_settings, dict):
+        raise ValueError("VS Code [log] settings must be an object.")
+    selected_log: dict[str, object] = {}
+    for key, allowed in (
+        ("editor.wordWrap", {"off", "on", "wordWrapColumn", "bounded"}),
+        ("editor.renderWhitespace", {"none", "boundary", "selection", "trailing", "all"}),
+    ):
+        if key in log_settings:
+            value = log_settings[key]
+            if not isinstance(value, str) or value not in allowed:
+                raise ValueError(f"Invalid VS Code [log] setting: {key}")
+            selected_log[key] = value
+    if "editor.guides.indentation" in log_settings:
+        value = log_settings["editor.guides.indentation"]
+        if not isinstance(value, bool):
+            raise ValueError("VS Code [log] editor.guides.indentation must be boolean.")
+        selected_log["editor.guides.indentation"] = value
+    if "editor.rulers" in log_settings:
+        rulers = log_settings["editor.rulers"]
+        if not isinstance(rulers, list) or not all(type(value) is int and 0 <= value <= 10000 for value in rulers):
+            raise ValueError("VS Code [log] editor.rulers must be a list of column numbers.")
+        selected_log["editor.rulers"] = rulers
+    if selected_log:
+        selected["[log]"] = selected_log
+    if not selected:
+        raise ValueError("No ENSDF-related VS Code settings found.")
+    return json.dumps(selected, ensure_ascii=False, indent=2) + "\n"
+
+
+def sync_vscode_settings(plugin_root: Path, content: str, dry_run: bool) -> None:
+    target = plugin_root / "vscode-settings.json"
+    if target.is_file() and target.read_text(encoding="utf-8") == content:
+        print("SKIP   vscode-settings.json")
+    elif dry_run:
+        print("COPY   vscode-settings.json")
+    else:
+        target.write_text(content, encoding="utf-8")
+        print("COPIED vscode-settings.json")
 
 
 def normalize_relative_path(path: Path | str) -> Path:
@@ -1147,9 +1256,21 @@ def parse_args() -> argparse.Namespace:
         default="patch",
         help="Version bump level (default: patch).",
     )
+    parser.add_argument(
+        "--settings-file",
+        type=Path,
+        help="VS Code user settings.json (defaults to the current user's VS Code settings).",
+    )
+    parser.add_argument(
+        "--skip-vscode-settings",
+        action="store_true",
+        help="Leave the plugin's VS Code settings reference unchanged.",
+    )
     args = parser.parse_args()
     if args.no_bump and "--bump" in sys.argv:
         parser.error("Cannot combine --bump with --no-bump.")
+    if args.skip_vscode_settings and args.settings_file:
+        parser.error("Cannot combine --settings-file with --skip-vscode-settings.")
     return args
 
 
@@ -1159,6 +1280,9 @@ def main() -> int:
     plugin_root = repo_root / "plugins" / "ensdf-agent"
     source_root = Path(r"D:\X\ND\ENSDF\.github")
 
+    settings_content = None
+    if not args.skip_vscode_settings:
+        settings_content = build_vscode_settings(args.settings_file or default_vscode_settings_path())
     validate_source_layout(source_root)
     # Validate transformations before version or payload files are modified.
     for relative in iter_managed_source_files(source_root):
@@ -1186,6 +1310,8 @@ def main() -> int:
     else:
         get_canonical_version(repo_root)
     sync_compat_manifest(plugin_root, args.dry_run, planned_version)
+    if settings_content is not None:
+        sync_vscode_settings(plugin_root, settings_content, args.dry_run)
     sync_readme(repo_root, plugin_root, args.dry_run)
     sync_agent_file(source_root, plugin_root, args.dry_run)
     return sync(source_root, plugin_root, args.dry_run)

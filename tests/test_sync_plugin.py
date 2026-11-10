@@ -22,6 +22,63 @@ SPEC.loader.exec_module(sync_plugin)
 
 
 class SyncTests(unittest.TestCase):
+    def test_vscode_settings_export_is_filtered_and_handles_jsonc(self):
+        with tempfile.TemporaryDirectory(prefix="settings test ") as directory:
+            root = Path(directory)
+            source = root / "settings.json"
+            source.write_text(
+                r'''{
+                  // Unrelated personal settings must not be exported.
+                  "remote.SSH.path": "C:\\private\\ssh.exe",
+                  "chat.tools.terminal.autoApprove": {"dangerous": true},
+                  "chat.useAgentSkills": true,
+                  "chat.useCustomAgentHooks": false,
+                  "files.associations": {
+                    "*.ens": "log",
+                    "private/path/*": "text",
+                  },
+                  "[log]": {
+                    "editor.rulers": [5, 80,],
+                    "editor.wordWrap": "on",
+                    "editor.fontFamily": "Private Font",
+                  },
+                  "ignored": "https://example.test/*not a comment*/",
+                }''',
+                encoding="utf-8",
+            )
+            content = sync_plugin.build_vscode_settings(source)
+            self.assertEqual(json.loads(content), {
+                "chat.useAgentSkills": True,
+                "chat.useCustomAgentHooks": False,
+                "files.associations": {"*.ens": "log"},
+                "[log]": {"editor.wordWrap": "on", "editor.rulers": [5, 80]},
+            })
+            plugin = root / "plugin"
+            plugin.mkdir()
+            with contextlib.redirect_stdout(io.StringIO()):
+                sync_plugin.sync_vscode_settings(plugin, content, True)
+                self.assertFalse((plugin / "vscode-settings.json").exists())
+                sync_plugin.sync_vscode_settings(plugin, content, False)
+                self.assertEqual((plugin / "vscode-settings.json").read_text(encoding="utf-8"), content)
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    sync_plugin.sync_vscode_settings(plugin, content, False)
+                self.assertIn("SKIP", output.getvalue())
+
+    def test_vscode_settings_reject_invalid_values_and_duplicate_keys(self):
+        with tempfile.TemporaryDirectory(prefix="settings invalid ") as directory:
+            source = Path(directory) / "settings.json"
+            for content in (
+                '{"chat.useAgentSkills": "yes"}',
+                '{"chat.useAgentSkills": true, "chat.useAgentSkills": false}',
+                '{"files.associations": {"*.ens": "C:\\\\private\\\\path"}}',
+                '{"[log]": {"editor.rulers": [true]}}',
+                '{"chat.useAgentSkills": true /* unterminated',
+            ):
+                with self.subTest(content=content):
+                    source.write_text(content, encoding="utf-8")
+                    with self.assertRaises((ValueError, json.JSONDecodeError)):
+                        sync_plugin.build_vscode_settings(source)
+
     def test_markdown_references_and_commands(self):
         source = (
             "---\nname: example\n---\n"
