@@ -10,17 +10,17 @@ Open-source release: [github.com/FRIBND/ENSDF-Agent](https://github.com/FRIBND/E
 
 Install from the Git repository:
 
-1. Open the VS Code Command Palette (`kb(workbench.action.showCommands)`):
+1. Open the VS Code Command Palette:
    - Windows/Linux: `Ctrl + Shift + P`
    - macOS: `Cmd + Shift + P`
-2. Run **Chat: Install Plugin from Source**.
+2. Type **Chat: Install Plugin from Source** and press Enter.
 3. Enter `FRIBND/ENSDF-Agent` and press Enter.
 
-It jumps to Extensions: Agent Plugins panel for no reason, but the installation is done.
+Occasionally, it shows `Failed to install plugin` for no reason.
 
 Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace).
 
-Open **Preferences: Open User Settings (JSON)** in VS Code and copy the desired json commands from `vscode-settings.json` shipped with the plugin.
+Open **Preferences: Open User Settings (JSON)** in VS Code and copy the desired json commands from `C:\Users\<YourUsername>\.copilot\installed-plugins\ensdf-agent\ensdf-agent\vscode-settings.json` shipped with the plugin.
 
 
 ## Overview
