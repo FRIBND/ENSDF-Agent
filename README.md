@@ -27,9 +27,16 @@ Developed and refined through daily evaluation tasks at FRIB Nuclear Data Group.
 
 Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copilot, **ENSDF-Agent** employs Harness Engineering and Semantic Structuring to orchestrate an evaluator-in-the-loop agentic workflow.
 
-## Plugin Package
+## Package Structure
 
-The package uses [Agent Plugins 1.0](https://code.visualstudio.com/docs/agents/reference/agent-plugin-reference): root `plugin.json` declares the format, active portable skills live under `skills/`, and VS Code-specific agents and hooks live under `com.github.copilot/`. Low-frequency skills are mirrored under `skills-dormant/` as skills, not converted to commands. That directory is outside the standard `skills/` discovery location, so clients are not required to discover or invoke them.
+| Path | Contents |
+|------|----------|
+| `plugin.json` | Plugin metadata |
+| `com.github.copilot/agents/` | ENSDF-Agent definition |
+| `com.github.copilot/hooks/scripts/` | Hook scripts used by ENSDF-Agent |
+| `scripts/` | ENSDF processing and validation scripts |
+| `skills/` | Skills available to the agent |
+| `skills-dormant/` | Additional skills not loaded automatically |
 
 ## Development Timeline
 
@@ -60,14 +67,17 @@ See [VS Code's AI settings reference](https://code.visualstudio.com/docs/agents/
 
 ## Hooks
 
-All hooks are scoped to **ENSDF-Agent** in its agent frontmatter and run only when that custom agent is active. VS Code forwards plugin-provided custom-agent hooks with the agent; this plugin does not use plugin-wide hooks.
+ENSDF-Agent has five agent-scoped hook entries using four scripts:
 
-| Scope | Hook | Event | Behavior |
-|-------|------|-------|----------|
-| ENSDF-Agent | `block-root-file-creation` | `preToolUse` | Denies protected root, `A<N>/`, and `XUNDL/` file creation; allows `.github/temp/` and non-write tools |
-| ENSDF-Agent | `block-git-revert` | `preToolUse` | Denies unsafe `git restore`/`git checkout`; allows safe temp-scoped operations and `git switch` |
-| ENSDF-Agent | `guard_ens_edit` | `preToolUse` | Denies stale or unanchored `.ens` edits, repeated/mismatched anchors, edits over 8 lines, and `.ens` `apply_patch` |
-| ENSDF-Agent | `verify_ens_edit` | `postToolUse` | Reports non-ASCII and 80-column violations as agent context; post-tool checks cannot undo an edit that already ran |
+| Event | Script | Purpose |
+|-------|--------|---------|
+| `preToolUse` | `block-root-file-creation` | Blocks file creation in protected directories. |
+| `preToolUse` | `block-git-revert` | Blocks unsafe `git restore` and `git checkout` commands. |
+| `preToolUse` | `guard_ens_edit` | Checks file freshness and edit anchors before `.ens` edits. |
+| `postToolUse` | `verify_ens_edit` | Checks `.ens` changes after tool calls. |
+| `postToolUseFailure` | `verify_ens_edit` | Checks `.ens` changes after failed tool calls. |
+
+Post-tool checks report problems; they cannot undo changes.
 
 
 ## Caveats
