@@ -16,11 +16,23 @@ Install from the source:
 2. Type **Chat: Install Plugin from Source** and press Enter.
 3. Enter `FRIBND/ENSDF-Agent` and press Enter.
 
+Done. You do not need to read the rest of this section.
+
+Currently, it jumps to the Extensions panel after Step 3, but the installation is complete and the plugin is ready to use.
+
 Occasionally, VS Code displays an error message `Failed to install plugin` without a clear reason.
 
-Alternatively, open **Chat: Open Customizations**, select **Plugins**, and use the **+** button next to **User** (profile-wide) or **Workspace** (current workspace) to install the plugin from the Git repository.
+Alternatively,
+1. Open the VS Code Command Palette:
+   - Windows/Linux: `Ctrl + Shift + P`
+   - macOS: `Cmd + Shift + P`
+2. Type **Chat: Open Customizations** and press Enter.
+3. Select **Plugins**, and click either the **+** button on the right side of **User** (profile-wide) or **Workspace** (current workspace).
+4. Enter `FRIBND/ENSDF-Agent` and press Enter.
 
-Open **Preferences: Open User Settings (JSON)** in VS Code and copy the desired json commands from `C:\Users\<YourUsername>\.copilot\installed-plugins\ensdf-agent\ensdf-agent\vscode-settings.json` shipped with the plugin.
+## Recommended Settings
+Open **Preferences: Open User Settings (JSON)** in VS Code and copy the desired json commands from `C:\Users\<YourUsername>\.copilot\installed-plugins\_direct\FRIBND--ENSDF-Agent\vscode-settings.json` shipped with the plugin.
+If you install the plugin from the VS Code Marketplace, the recommended settings will be located at `C:\Users\<YourUsername>\.copilot\installed-plugins\ensdf-agent\ensdf-agent\vscode-settings.json`.
 
 
 ## Overview
@@ -29,18 +41,6 @@ The first Agent designed for Evaluated Nuclear Structure Data File (ENSDF) workf
 Developed and refined through daily evaluation tasks at FRIB Nuclear Data Group.
 
 Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copilot, **ENSDF-Agent** employs Harness Engineering and Semantic Structuring to orchestrate an evaluator-in-the-loop agentic workflow.
-
-## Package Structure
-
-| Path | Contents |
-|------|----------|
-| `plugin.json` | Plugin manifest and metadata |
-| `com.github.copilot/agents/` | ENSDF-Agent definition |
-| `com.github.copilot/hooks/scripts/` | Hook scripts used by ENSDF-Agent |
-| `scripts/` | ENSDF processing and validation scripts |
-| `vscode-settings.json` | Recommended VS Code settings |
-| `skills/` | Skills available to the agent |
-| `skills-dormant/` | Additional skills not loaded automatically |
 
 ## Development Timeline
 - 2026-11-10: **ENSDF-Agent** was migrated to be compatible with Copilot Harness.
@@ -57,12 +57,17 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 - 2025-08-14: The FRIBND AI Agent was first introduced at the 2025 Low Energy Community Meeting at TAMU.
 - 2025-08-06: The initial version of the FRIBND Custom Agent Chat Mode was posted within [github.com/sunlijie-msu/ENSDF](https://github.com/sunlijie-msu/ENSDF).
 
-## Prerequisites
+## Package Structure
 
-- **Python 3** on PATH — hooks and ENSDF validation scripts require it.
-- Windows users: Python must be invokable as `python` from terminal.
-- PDF export and FormatCheck require Java and their respective Java tool JARs.
-
+| Path | Contents |
+|------|----------|
+| `plugin.json` | Plugin manifest and metadata |
+| `com.github.copilot/agents/` | ENSDF-Agent definition |
+| `com.github.copilot/hooks/scripts/` | Hook scripts used by ENSDF-Agent |
+| `scripts/` | ENSDF processing and validation scripts |
+| `vscode-settings.json` | Recommended VS Code settings |
+| `skills/` | Skills available to the agent |
+| `skills-dormant/` | Additional skills not loaded automatically |
 
 ## Troubleshooting
 See [VS Code's agent troubleshooting guide](https://code.visualstudio.com/docs/agents/agent-troubleshooting/troubleshooting).
@@ -85,7 +90,7 @@ Post-tool checks report problems; they cannot undo changes.
 
 
 ## Caveats
-- Since March 2026, the VS Code team has been prioritizing excessively frequent updates to AI features at the expense of the stability and reliability of the development environment, leading to mounting frustration among users. The VS Code documentation and release notes are increasingly verbose, vague, and self-contradictory. The usability of **ENSDF-Agent** could be negatively impacted by some over-engineered updates. The FRIB Nuclear Data Group is actively monitoring the VS Code updates and is committed to providing timely fixes to ensure the usability of **ENSDF-Agent**.
+- Since March 2026, the VS Code team has been prioritizing excessively frequent updates to AI features at the expense of the stability and reliability of the development environment, leading to mounting frustration among users. The VS Code documentation and release notes are increasingly verbose, vague, inconsistent, and self-contradictory. The usability of **ENSDF-Agent** could be negatively impacted by some over-engineered updates. The FRIB Nuclear Data Group is actively monitoring the VS Code updates and is committed to providing timely fixes to ensure the usability of **ENSDF-Agent**.
 - VS Code Agent Plugins do not support shipping a standalone `copilot-instructions.md` alongside an agent; the content is merged into `com.github.copilot/agents/ENSDF-Agent.agent.md` instead.
 - VS Code extension-contributed agents and skills will negatively impact the user experience of **ENSDF-Agent**. Extensions register these agents via their package.json contribution points. When an extension is enabled, its agents and skills are automatically discovered and added to the Customization menu. Currently, there is no setting in VS Code to disable or hide these extension-contributed agents while still keeping the main extension enabled. One workaround is to execute Workspace-Level Disable: Click the Gear icon (Manage) directly on the extension list item. Select Disable (Workspace) from the dropdown menu.
 
