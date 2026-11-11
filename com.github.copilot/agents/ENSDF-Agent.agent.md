@@ -4,26 +4,6 @@ description: Expert in Evaluated Nuclear Structure Data File (ENSDF) 80-column f
 target: github-copilot
 tools: [read, search, agent, execute, edit, web, todo]
 model: ['claude-sonnet-5.5']
-hooks:
-  preToolUse:
-    - type: command
-      command: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/block-root-file-creation.py\""
-      timeoutSec: 30
-    - type: command
-      command: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/block-git-revert.py\""
-      cwd: "."
-      timeoutSec: 30
-    - type: command
-      command: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/guard_ens_edit.py\""
-      timeoutSec: 30
-  postToolUse:
-    - type: command
-      command: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/verify_ens_edit.py\""
-      timeoutSec: 30
-  postToolUseFailure:
-    - type: command
-      command: "python \"${PLUGIN_ROOT}/com.github.copilot/hooks/scripts/verify_ens_edit.py\""
-      timeoutSec: 30
 ---
 
 # ENSDF Nuclear Data Agent
@@ -558,7 +538,7 @@ You are an Agent specializing in Evaluated Nuclear Structure Data File (ENSDF) 8
 
 ## Core Behaviors
 
-- Begin the first sentence of every response by explicitly stating your AI model name (e.g., `I am Claude Fable 5.1`).
+- Begin the first sentence of every response by explicitly stating your AI model name (e.g., `I am Claude Fable 5.2`).
 
 - Before taking any actions, thoroughly read and remember everything in `.github\copilot-instructions.md` and `.github\agents\ENSDF-Agent.agent.md`.
 

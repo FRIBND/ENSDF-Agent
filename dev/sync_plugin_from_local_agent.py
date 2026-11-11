@@ -10,15 +10,12 @@ the root also keeps bundled paths resolvable after installation.
 
 Run order, see main():
     1. bump_versions()     - bump manifests and return canonical version.
-    2. sync_agent_file()   - generate the single agent in
-                             com.github.copilot/agents/ from source; retain
-                             agent-scoped hooks.
-    3. sync()              - mirror skills/, skills-dormant/, scripts/, and
-                             hooks/scripts/, adapting bundled references.
+    2. sync_agent_file()   - generate the agent without hook configuration.
+    3. sync()              - mirror skills/, skills-dormant/, and scripts/.
 
 plugin.json is plugin-owned and is the only manifest; any stale .plugin/
-compatibility copy is removed. Agent and hook outputs are generated in the Agent
-Plugins 1.0 Copilot namespace.
+compatibility copy is removed. The agent is generated in the Agent Plugins 1.0
+Copilot namespace.
 """
 
 from __future__ import annotations
@@ -37,7 +34,6 @@ managed_entries = (
     "scripts",
     "skills",
     "skills-dormant",
-    "hooks/scripts",
 )
 managed_plugin_entries = (
     "scripts",
@@ -494,8 +490,6 @@ def normalize_relative_path(path: Path | str) -> Path:
 
 
 def plugin_relative_path(path: Path) -> Path:
-    if path.parts[:2] == ("hooks", "scripts"):
-        return Path("com.github.copilot", "hooks", *path.parts[1:])
     return path
 
 
@@ -583,57 +577,6 @@ def rewrite_markdown_paths(text: str, target_relative: Path) -> str:
     """Preserve authored markdown, except a workstation-specific tool path."""
     if target_relative == Path("skills-dormant/ens2pdf/SKILL.md"):
         text = text.replace("D:\\X\\ND\\McMaster-MSU-Java-NDS\\", "${ENSDF_NDS_JAR}")
-    return text
-
-
-def rewrite_hook_script(text: str, relative: Path) -> str:
-    """Bind workspace state to the hook event, not the installed script path."""
-    name = relative.name
-    if relative.parts[:2] != ("hooks", "scripts") or name not in {
-        "block-root-file-creation.py", "guard_ens_edit.py", "verify_ens_edit.py"
-    }:
-        return text
-
-    old = (
-        'def workspace_root():\n'
-        '    return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))'
-    )
-    new = 'def workspace_root(cwd):\n    return os.path.realpath(os.path.abspath(cwd))'
-    if text.count(old) != 1:
-        raise ValueError(f"Cannot adapt workspace root in {relative}: source changed")
-    text = text.replace(old, new)
-    if name == "block-root-file-creation.py":
-        old = "    root = workspace_root()\n    cwd = working_directory(hook_input)"
-        new = "    cwd = working_directory(hook_input)\n    root = workspace_root(cwd)"
-    elif name == "guard_ens_edit.py":
-        old = 'state_path = os.path.join(workspace_root(), ".github", "temp", "ens_guard", "state.json")'
-        new = 'state_path = os.path.join(workspace_root(root), ".github", "temp", "ens_guard", "state.json")'
-    else:
-        old = 'state_path = os.path.join(workspace_root(), ".github", "temp", "ens_guard", "state.json")'
-        new = 'state_path = os.path.join(workspace_root(cwd), ".github", "temp", "ens_guard", "state.json")'
-    if text.count(old) != 1:
-        raise ValueError(f"Cannot adapt workspace state in {relative}: source changed")
-    text = text.replace(old, new)
-    if name == "verify_ens_edit.py":
-        old = '''    plugin_root = os.environ.get("PLUGIN_ROOT", "")
-    if plugin_root:
-        candidate = os.path.join(plugin_root, "scripts", "ensdf_1line_ruler.py")
-        if os.path.isfile(candidate):
-            return candidate
-    candidate = os.path.join(workspace_root(), ".github", "scripts", "ensdf_1line_ruler.py")'''
-        new = '''    plugin_root = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-    candidate = os.path.join(plugin_root, "scripts", "ensdf_1line_ruler.py")
-    if os.path.isfile(candidate):
-        return candidate
-    candidate = os.path.join(workspace_root(payload.get("cwd") or os.getcwd()), ".github", "scripts", "ensdf_1line_ruler.py")'''
-        if text.count(old) != 1:
-            raise ValueError(f"Cannot adapt bundled ruler lookup in {relative}: source changed")
-        text = text.replace(old, new)
-        old = """            '  3. Re-run: python .github/scripts/ensdf_1line_ruler.py --line "<fixed line>"\\n'"""
-        new = '''            f"  3. Re-run the ENSDF ruler at {ruler_script} on the fixed line, using a shell-quoted path.\\n"'''
-        if text.count(old) != 1:
-            raise ValueError(f"Cannot adapt ruler guidance in {relative}: source changed")
-        text = text.replace(old, new)
     return text
 
 
@@ -758,8 +701,6 @@ def build_managed_content(source_root: Path, relative: Path) -> str | None:
         validate_portable_text(text, relative)
         if text == original:
             return None
-    elif relative.parts[:2] == ("hooks", "scripts") and relative.suffix == ".py":
-        text = rewrite_hook_script(source_path.read_text(encoding="utf-8"), relative)
     elif relative.suffix == ".py" and relative.parts[0] == "scripts":
         text = rewrite_bundled_script(source_path.read_text(encoding="utf-8"), relative)
     elif relative.suffix.lower() in {".py", ".sh", ".ps1", ".js", ".cjs", ".mjs", ".json", ".yaml", ".yml", ".toml"}:
@@ -768,42 +709,6 @@ def build_managed_content(source_root: Path, relative: Path) -> str | None:
         return None
     validate_portable_text(text, relative)
     return text
-
-
-def _agent_hook_record_count(agent_text: str) -> int:
-    """Count hook entries in agent frontmatter for rewrite preservation checks."""
-    lines = agent_text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return 0
-    frontmatter_end = next(
-        (index for index in range(1, len(lines)) if lines[index].strip() == "---"),
-        None,
-    )
-    if frontmatter_end is None:
-        return 0
-    hooks_start = next(
-        (
-            index
-            for index in range(1, frontmatter_end)
-            if re.fullmatch(r"hooks:[ \t]*(?:#.*)?", lines[index])
-        ),
-        None,
-    )
-    if hooks_start is None:
-        return 0
-    hooks_end = next(
-        (
-            index
-            for index in range(hooks_start + 1, frontmatter_end)
-            if lines[index].strip() and not lines[index][0].isspace()
-        ),
-        frontmatter_end,
-    )
-    return sum(
-        1
-        for line in lines[hooks_start + 1:hooks_end]
-        if re.match(r"^[ \t]*-[ \t]+type[ \t]*:", line)
-    )
 
 
 def remove_empty_directories(root: Path) -> None:
@@ -851,324 +756,8 @@ def sync_readme(repo_root: Path, plugin_root: Path, dry_run: bool) -> None:
         print("COPIED README.md")
 
 
-SCRIPT_SUFFIXES = (".py", ".js", ".cjs", ".mjs", ".sh", ".ps1", ".bat", ".cmd", ".exe")
-
-
-def rewrite_plugin_hook_path(command: str, known_scripts: frozenset[str] = frozenset()) -> str:
-    """Rewrite bundled script paths in a shell command, preserving its arguments."""
-    source_path = re.compile(
-        r"(?P<quoted>['\"])(?P<quoted_path>(?:\./)?\.github[\\/]+hooks[\\/]+.*?)(?P=quoted)"
-        r"|(?P<bare>(?:\./)?\.github[\\/]+hooks[\\/]+[^\s\"';&|<>]+)"
-    )
-
-    def replace(match: re.Match[str]) -> str:
-        bare = match.group("bare")
-        if bare:
-            _reject_ambiguous_bare_path(match.string, match.end(), bare, known_scripts)
-        path = match.group("quoted_path") or bare
-        path = path.replace("\\", "/")
-        if path.startswith("./"):
-            path = path[2:]
-        rewritten = "${PLUGIN_ROOT}/com.github.copilot/hooks/" + path[len(".github/hooks/"):]
-        return f'"{rewritten}"'
-
-    return source_path.sub(replace, command)
-
-
-def _reject_ambiguous_bare_path(
-    source: str,
-    end: int,
-    matched: str,
-    known_scripts: frozenset[str],
-) -> None:
-    """Reject unquoted paths whose spaces make the token boundary ambiguous.
-
-    ``.github/hooks/scripts/a b.py`` and ``.github/hooks/scripts/a\\ b.py``
-    cannot be quoted safely after the fact, so fail instead of publishing a
-    command that points at a truncated path. A bare path that names a real
-    bundled script is unambiguous even without an extension.
-    """
-    tail = source[end:]
-    segment = re.split(r"[;&|<>]", tail, maxsplit=1)[0]
-    if matched.endswith("\\"):
-        raise ValueError(
-            "Unquoted hook script path contains an escaped space in the source agent and "
-            f"cannot be rewritten safely; quote the path in the source file. Source: {source!r}"
-        )
-    if matched.lower().endswith(SCRIPT_SUFFIXES):
-        return
-    if matched.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] in known_scripts:
-        return
-    remainder = [
-        token for token in re.findall(r"[^\s\"']+", segment)
-        if token and not token.startswith("-")
-    ]
-    if not any(token.lower().endswith(SCRIPT_SUFFIXES) for token in remainder):
-        return
-    raise ValueError(
-        "Unquoted hook script path contains a space in the source agent and cannot be "
-        f"rewritten safely; quote the path in the source file. Source: {source!r}"
-    )
-
-
-def rewrite_plugin_hook_executable(executable: str) -> str:
-    """Rewrite a direct hook executable path without adding shell quoting."""
-    source_path = re.fullmatch(
-        r"(?:\./)?\.github[\\/]+hooks[\\/]+(.+)",
-        executable,
-    )
-    if not source_path:
-        return executable
-    relative_path = source_path.group(1).replace("\\", "/")
-    return "${PLUGIN_ROOT}/com.github.copilot/hooks/" + relative_path
-
-
-def _decode_hook_string_scalar(value: str) -> tuple[str, str] | None:
-    """Decode a simple YAML string scalar and return its trailing comment/space."""
-    stripped = value.strip()
-    if stripped in {"|", "|-", "|+", ">", ">-", ">+"}:
-        return None
-
-    trailing = value[len(value.rstrip()):]
-    if stripped.startswith('"'):
-        try:
-            decoded, end = json.JSONDecoder().raw_decode(stripped)
-        except json.JSONDecodeError as error:
-            raise ValueError(f"Invalid quoted hook command scalar: {value!r}") from error
-        suffix = stripped[end:]
-        if suffix and not (suffix.lstrip().startswith("#")):
-            raise ValueError(f"Unexpected text after hook command scalar: {suffix!r}")
-        return decoded, suffix + trailing
-
-    if stripped.startswith("'"):
-        end = 1
-        decoded_chars = []
-        while end < len(stripped):
-            char = stripped[end]
-            if char == "'":
-                if end + 1 < len(stripped) and stripped[end + 1] == "'":
-                    decoded_chars.append("'")
-                    end += 2
-                    continue
-                break
-            decoded_chars.append(char)
-            end += 1
-        if end == len(stripped):
-            raise ValueError(f"Unterminated quoted hook command scalar: {value!r}")
-        suffix = stripped[end + 1:]
-        if suffix and not suffix.lstrip().startswith("#"):
-            raise ValueError(f"Unexpected text after hook command scalar: {suffix!r}")
-        return "".join(decoded_chars), suffix + trailing
-
-    comment_at = next(
-        (
-            index
-            for index, char in enumerate(stripped)
-            if char == "#" and (index == 0 or stripped[index - 1].isspace())
-        ),
-        None,
-    )
-    if comment_at is None:
-        return stripped, trailing
-    return stripped[:comment_at].rstrip(), stripped[comment_at:] + trailing
-
-
-def _rewrite_hook_command_line(
-    line: str,
-    field_indent: int,
-    known_scripts: frozenset[str] = frozenset(),
-) -> tuple[str, bool]:
-    """Rewrite one hook executable field; report whether it starts a block scalar."""
-    match = re.match(
-        r"^(?P<indent>[ \t]*)(?P<key>command|exec|cwd|bash|powershell|windows|linux|osx):"
-        r"(?P<spacing>[ \t]*)(?P<value>.*?)(?P<newline>\r?\n)?$",
-        line,
-    )
-    if not match or len(match.group("indent")) != field_indent:
-        return line, False
-
-    key = match.group("key")
-    raw_value = match.group("value")
-    if raw_value.strip() in {"|", "|-", "|+", ">", ">-", ">+"}:
-        return line, True
-
-    if ".github" not in raw_value or "hooks" not in raw_value:
-        return line, False
-    decoded = _decode_hook_string_scalar(raw_value)
-    if decoded is None:
-        return line, True
-    value, suffix = decoded
-    if key in {"exec", "cwd"}:
-        rewritten = rewrite_plugin_hook_executable(value)
-    else:
-        rewritten = rewrite_plugin_hook_path(value, known_scripts)
-    if rewritten == value:
-        return line, False
-
-    return (
-        f"{match.group('indent')}{key}:{match.group('spacing')}"
-        f"{json.dumps(rewritten)}{suffix}{match.group('newline') or ''}",
-        False,
-    )
-
-
-def rewrite_agent_hook_block(
-    agent_text: str,
-    known_scripts: frozenset[str] = frozenset(),
-) -> str:
-    """Rewrite bundled paths in an agent's hooks without moving or reformatting them."""
-    lines = agent_text.splitlines(keepends=True)
-    if not lines or lines[0].strip() != "---":
-        return agent_text
-
-    frontmatter_end = next(
-        (index for index in range(1, len(lines)) if lines[index].strip() == "---"),
-        None,
-    )
-    if frontmatter_end is None:
-        return agent_text
-
-    hooks_start = next(
-        (
-            index
-            for index in range(1, frontmatter_end)
-            if re.fullmatch(r"hooks:[ \t]*(?:#.*)?(?:\r?\n)?", lines[index])
-        ),
-        None,
-    )
-    if hooks_start is None:
-        return agent_text
-
-    hooks_end = next(
-        (
-            index
-            for index in range(hooks_start + 1, frontmatter_end)
-            if lines[index].strip() and not lines[index][0].isspace()
-        ),
-        frontmatter_end,
-    )
-    current_field_indent = None
-    args_indent = None
-    env_indent = None
-    index = hooks_start + 1
-    while index < hooks_end:
-        line = lines[index]
-        indent = len(line) - len(line.lstrip())
-        if args_indent is not None and line.strip() and indent <= args_indent:
-            args_indent = None
-        if env_indent is not None and line.strip() and indent <= env_indent:
-            env_indent = None
-        item_match = re.match(r"^(?P<indent>[ \t]*)-\s+type:", lines[index])
-        if item_match:
-            current_field_indent = len(item_match.group("indent")) + 2
-
-        if current_field_indent is not None:
-            env_match = re.match(r"^(?P<indent>[ \t]*)env:[ \t]*(?:#.*)?(?:\r?\n)?$", line)
-            if env_match and len(env_match.group("indent")) == current_field_indent:
-                env_indent = current_field_indent
-                index += 1
-                continue
-            env_value = re.match(
-                r"^(?P<indent>[ \t]*)(?P<key>[A-Za-z_][A-Za-z0-9_]*):"
-                r"(?P<spacing>[ \t]*)(?P<value>.*?)(?P<newline>\r?\n)?$",
-                line,
-            )
-            if env_indent is not None and env_value and len(env_value.group("indent")) > env_indent:
-                raw = env_value.group("value")
-                if ".github" in raw and "hooks" in raw:
-                    decoded = _decode_hook_string_scalar(raw)
-                    if decoded is None:
-                        raise ValueError(f"Unsupported block scalar in hook environment: {line!r}")
-                    value, suffix = decoded
-                    rewritten = rewrite_plugin_hook_executable(value)
-                    if rewritten != value:
-                        lines[index] = (
-                            f"{env_value.group('indent')}{env_value.group('key')}:"
-                            f"{env_value.group('spacing')}{json.dumps(rewritten)}"
-                            f"{suffix}{env_value.group('newline') or ''}"
-                        )
-                index += 1
-                continue
-            args_match = re.match(
-                r"^(?P<indent>[ \t]*)args:[ \t]*(?P<value>.*?)(?P<newline>\r?\n)?$",
-                line,
-            )
-            if args_match and len(args_match.group("indent")) == current_field_indent:
-                raw = args_match.group("value")
-                if not raw.strip() or raw.lstrip().startswith("#"):
-                    args_indent = current_field_indent
-                elif ".github" in raw:
-                    try:
-                        args = json.loads(raw)
-                    except json.JSONDecodeError as error:
-                        raise ValueError(f"Unsupported hook args containing a bundled path: {raw!r}") from error
-                    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
-                        raise ValueError(f"Hook args must be strings: {raw!r}")
-                    rewritten_args = [rewrite_plugin_hook_executable(arg) for arg in args]
-                    lines[index] = (
-                        f"{args_match.group('indent')}args: {json.dumps(rewritten_args)}"
-                        f"{args_match.group('newline') or ''}"
-                    )
-                index += 1
-                continue
-            arg_match = re.match(
-                r"^(?P<indent>[ \t]*)-[ \t]+(?P<value>.*?)(?P<newline>\r?\n)?$",
-                line,
-            )
-            if args_indent is not None and arg_match and len(arg_match.group("indent")) > args_indent:
-                decoded = _decode_hook_string_scalar(arg_match.group("value"))
-                if decoded is None:
-                    raise ValueError(f"Unsupported block scalar in hook args: {line!r}")
-                value, suffix = decoded
-                rewritten = rewrite_plugin_hook_executable(value)
-                if rewritten != value:
-                    lines[index] = (
-                        f"{arg_match.group('indent')}- {json.dumps(rewritten)}"
-                        f"{suffix}{arg_match.group('newline') or ''}"
-                    )
-                index += 1
-                continue
-            rewritten, is_block = _rewrite_hook_command_line(
-                lines[index],
-                current_field_indent,
-                known_scripts,
-            )
-            lines[index] = rewritten
-            if is_block:
-                block_indent = current_field_indent
-                field_match = re.match(
-                    r"^[ \t]*(?P<key>command|exec|cwd|bash|powershell|windows|linux|osx):",
-                    lines[index],
-                )
-                field_key = field_match.group("key") if field_match else "command"
-                block_index = index + 1
-                while block_index < hooks_end:
-                    block_line = lines[block_index]
-                    if block_line.strip() and len(block_line) - len(block_line.lstrip()) <= block_indent:
-                        break
-                    newline = "\r\n" if block_line.endswith("\r\n") else "\n" if block_line.endswith("\n") else ""
-                    content = block_line[:len(block_line) - len(block_line.lstrip())]
-                    command = block_line[len(content):].removesuffix(newline)
-                    if field_key in {"exec", "cwd"}:
-                        rewritten_command = rewrite_plugin_hook_executable(command)
-                    else:
-                        rewritten_command = rewrite_plugin_hook_path(command, known_scripts)
-                    if rewritten_command != command:
-                        lines[block_index] = content + rewritten_command + newline
-                    block_index += 1
-                index = block_index
-                continue
-        index += 1
-
-    rewritten_text = "".join(lines)
-    remaining = "".join(lines[hooks_start:hooks_end])
-    if re.search(r"\.github[\\/]+hooks[\\/]", remaining):
-        raise ValueError("Unsupported source hook path remains in agent frontmatter")
-    return rewritten_text
-
-
 def remove_plugin_wide_hook_config(plugin_root: Path, dry_run: bool) -> None:
-    """Remove obsolete hook configuration files so hooks remain agent-scoped."""
+    """Remove obsolete plugin-wide hook configurations."""
     targets = (
         plugin_root / "com.github.copilot" / "hooks" / "hooks.json",
         plugin_root / "hooks.json",
@@ -1178,10 +767,10 @@ def remove_plugin_wide_hook_config(plugin_root: Path, dry_run: bool) -> None:
             continue
         label = target.relative_to(plugin_root).as_posix()
         if dry_run:
-            print(f"REMOVE {label} (hooks now live in agent frontmatter)")
+            print(f"REMOVE {label} (hooks are disabled)")
         else:
             target.unlink()
-            print(f"REMOVED {label} (hooks now live in agent frontmatter)")
+            print(f"REMOVED {label} (hooks are disabled)")
 
 
 def inject_agent_version(agent_text: str, version: str) -> str:
@@ -1233,44 +822,51 @@ def inject_agent_version(agent_text: str, version: str) -> str:
     return "".join(["---\n", *new_frontmatter, remainder])
 
 
-def hook_script_names(source_root: Path) -> frozenset[str]:
-    """Names of bundled hook scripts, used to disambiguate unquoted paths."""
-    scripts = source_root / "hooks" / "scripts"
-    if not scripts.is_dir():
-        return frozenset()
-    names = set()
-    for path in scripts.rglob("*"):
-        if path.is_file():
-            names.add(path.name)
-            names.add(path.relative_to(scripts).as_posix())
-    return frozenset(names)
+def remove_agent_hooks(agent_text: str) -> str:
+    """Remove only the top-level hooks field from agent frontmatter."""
+    lines = agent_text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return agent_text
+    frontmatter_end = next(
+        (i for i in range(1, len(lines)) if lines[i].strip() == "---"),
+        None,
+    )
+    if frontmatter_end is None:
+        raise ValueError("Agent frontmatter is missing its closing delimiter")
+    starts = [
+        i for i in range(1, frontmatter_end)
+        if re.match(r"^hooks[ \t]*:", lines[i])
+    ]
+    if len(starts) > 1:
+        raise ValueError("Agent frontmatter contains duplicate hooks fields")
+    if not starts:
+        return agent_text
+    start = starts[0]
+    end = next(
+        (
+            i for i in range(start + 1, frontmatter_end)
+            if lines[i].strip() and not lines[i][0].isspace()
+            and not lines[i].lstrip().startswith("#")
+        ),
+        frontmatter_end,
+    )
+    comments = [
+        line for line in lines[start + 1:end]
+        if line.startswith("#")
+    ]
+    return "".join(lines[:start] + comments + lines[end:])
 
 
 def build_merged_agent_content(
     agent_text: str,
     instructions_text: str,
-    known_scripts: frozenset[str] = frozenset(),
 ) -> str:
     """Build the full plugin agent-file content from current source content.
 
-    This is a full rebuild, not an incremental merge: every call recomputes
-    the entire output from the two inputs currently on disk, so any edit,
-    addition, or removal in either source file is reflected on the very next
-    sync run. Nothing from a previous plugin copy is reused or preserved.
-
-    Three things happen to agent_text before it's used:
-      1. Agent-scoped hooks are retained in place; only bundled hook script
-         paths are rewritten to use the plugin root.
-      2. instructions_text (copilot-instructions.md) is appended as a
-         clearly labeled section, since VS Code Agent Plugins do not support
-         shipping that file standalone alongside an agent.
-    If instructions_text is empty (e.g. the source file was deleted), the
-    appended section is simply omitted.
+    Remove the agent's hook configuration and append ``copilot-instructions.md``,
+    which VS Code Agent Plugins do not load standalone for a plugin agent.
     """
-    rewritten_agent = rewrite_agent_hook_block(agent_text, known_scripts)
-    if _agent_hook_record_count(agent_text) != _agent_hook_record_count(rewritten_agent):
-        raise ValueError("Rewriting hook paths changed the agent's hook entry count")
-    rewritten_agent = rewritten_agent.rstrip("\n")
+    rewritten_agent = remove_agent_hooks(agent_text).rstrip("\n")
     instructions_body = instructions_text.strip("\n")
 
     sections = [rewritten_agent]
@@ -1292,13 +888,12 @@ def sync_agent_file(
 
     Reads source agents/ENSDF-Agent.agent.md + copilot-instructions.md fresh
     every run and rebuilds the merged output via build_merged_agent_content(),
-    which rewrites and retains agent-scoped hooks and appends the instructions
+    which removes agent-scoped hooks and appends the instructions
     file as a labeled section. The result is compared
     verbatim (full-text equality) against existing plugin files to decide
     COPIED/SKIP; there is no partial/section-level patch.
 
-    Obsolete plugin-wide hook configurations are removed; hooks stay in the
-    agent's frontmatter.
+    Obsolete plugin-wide hook configurations are also removed.
 
     Also deletes any stale standalone copilot-instructions.md left in the
     plugin payload, since that file must never ship on its own.
@@ -1325,7 +920,6 @@ def sync_agent_file(
     merged = build_merged_agent_content(
         agent_text,
         instructions_text,
-        hook_script_names(source_root),
     )
 
     remove_plugin_wide_hook_config(plugin_root, dry_run)
@@ -1538,7 +1132,6 @@ def main() -> int:
         (source_root / "agents" / "ENSDF-Agent.agent.md").read_text(encoding="utf-8"),
         (source_root / "copilot-instructions.md").read_text(encoding="utf-8")
         if (source_root / "copilot-instructions.md").is_file() else "",
-        hook_script_names(source_root),
     )
     validate_portable_text(agent_content, Path("com.github.copilot/agents/ENSDF-Agent.agent.md"))
     # Preflight manifests before anything is deleted or rewritten.

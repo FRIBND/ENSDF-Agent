@@ -63,7 +63,6 @@ Built on the open-source platforms Microsoft Visual Studio Code and GitHub Copil
 |------|----------|
 | `plugin.json` | Plugin manifest and metadata |
 | `com.github.copilot/agents/` | ENSDF-Agent definition |
-| `com.github.copilot/hooks/scripts/` | Hook scripts used by ENSDF-Agent |
 | `scripts/` | ENSDF processing and validation scripts |
 | `vscode-settings.json` | Recommended VS Code settings |
 | `skills/` | Skills available to the agent |
@@ -86,7 +85,7 @@ ENSDF-Agent has five agent-scoped hook entries using four scripts:
 | `postToolUse` | `verify_ens_edit` | Checks `.ens` changes after tool calls. |
 | `postToolUseFailure` | `verify_ens_edit` | Checks `.ens` changes after failed tool calls. |
 
-Post-tool checks report problems; they cannot undo changes.
+Agent-scoped hooks and Copilot Harness have compatibility issues. Agent hooks are not shipped with the plugin for the time being.
 
 
 ## Caveats
