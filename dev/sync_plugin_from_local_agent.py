@@ -655,6 +655,15 @@ def rewrite_bundled_script(text: str, relative: Path) -> str:
         text = text.replace(".github/check_gamma_ordering.py", "check_gamma_ordering.py")
     elif relative == Path("scripts/scan_editorial_review.py"):
         text = text.replace(".github/scripts/scan_editorial_review.py", "scan_editorial_review.py")
+    elif relative == Path("scripts/setup_mass_chain_folder.py"):
+        text, count = re.subn(
+            r'(?m)^(  python \.github\\scripts\\setup_chain_folders\.py )'
+            r'(?:[A-Za-z]:\\[^\s"]+|"[A-Za-z]:\\[^"\r\n]+")( --apply)$',
+            r"\1ABSOLUTE_CHAIN_PATH\2",
+            text,
+        )
+        if count != 1:
+            raise ValueError(f"Cannot adapt absolute chain-path example in {relative}")
     return text
 
 
@@ -857,6 +866,20 @@ def remove_agent_hooks(agent_text: str) -> str:
     return "".join(lines[:start] + comments + lines[end:])
 
 
+def remove_hook_enforcement_references(agent_text: str) -> str:
+    """Keep retained safeguards from implying that unavailable hooks enforce them."""
+    agent_text = agent_text.replace(
+        "### Data File Concurrent Editing Safeguards (hook-enforced)",
+        "### Data File Concurrent Editing Safeguards",
+    )
+    obsolete_guidance = (
+        "If a hook denies `git restore` or `git checkout`, treat that as expected policy enforcement. "
+        "Read the denial reason, do not retry with alternate Git syntax, and continue with\n"
+        "diff-aware repair using `replace_string_in_file` or `multi_replace_string_in_file`.\n"
+    )
+    return agent_text.replace(obsolete_guidance, "")
+
+
 def build_merged_agent_content(
     agent_text: str,
     instructions_text: str,
@@ -876,7 +899,7 @@ def build_merged_agent_content(
             "*(Concatenated from `copilot-instructions.md`.)*\n\n"
             + instructions_body
         )
-    return "\n".join(sections) + "\n"
+    return remove_hook_enforcement_references("\n".join(sections) + "\n")
 
 
 def sync_agent_file(

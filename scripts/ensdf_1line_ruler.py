@@ -33,6 +33,7 @@ COMMENT_FLAGS = {'c': 'comment', 'C': 'comment',
 #   'P' -> dataset parent/normalization record, whose "PN" type occupies columns 7-8
 OTHER_COL7_FLAGS = {'t': 'table/plot text',
                     'P': 'dataset parent/normalization ("PN" record)'}
+RECORDS_WITHOUT_TRAILING_FIELD_CHECKS = {'H', 'P', 'N', 'PN'}
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,10 @@ def _comment_flag_field(ch: str) -> bool:
 
 def _blank_only(ch: str) -> bool:
     return ch == ' '
+
+
+def _any_character(_ch: str) -> bool:
+    return True
 
 
 def _pad_record_example(text: str) -> str:
@@ -146,21 +151,40 @@ RECORD_DEFINITIONS: Dict[str, RecordDefinition] = {
         col77_validator=lambda ch: ch == ' ' or ch.isalpha() or ch == '?',
         col80_validator=lambda ch: ch in {' ', '?', 'S'},
     ),
+    'P': RecordDefinition(
+        label='Parent record (P)',
+        fmt=_pad_record_example(' 35XX  P ...'),
+        fields='NUCID(1-5)|CONT(6)|BLANK(7)|P(8)|...record-specific fields...',
+        col77_hint='Record-specific field; only line length is checked',
+        col80_hint='Record-specific field; only line length is checked',
+        col77_validator=_any_character,
+        col80_validator=_any_character,
+    ),
+    'N': RecordDefinition(
+        label='Normalization record (N)',
+        fmt=_pad_record_example(' 35XX  N ...'),
+        fields='NUCID(1-5)|CONT(6)|BLANK(7)|N(8)|...record-specific fields...',
+        col77_hint='Record-specific field; only line length is checked',
+        col80_hint='Record-specific field; only line length is checked',
+        col77_validator=_any_character,
+        col80_validator=_any_character,
+    ),
     'PN': RecordDefinition(
         label='Dataset parent/normalization record (PN - type occupies columns 7-8)',
         fmt=_pad_record_example(' 35XX PN'),
         fields='NUCID(1-5)|CONT(6)|P(7)|N(8)|...parent/normalization fields...|C(77)|...|BLANK(80)',
-        col77_hint='Column 77: space, alphabetic comment flag, *, &, @ only',
-        col80_hint='Column 80 must be blank for PN records',
-        col77_validator=_comment_flag_field,
-        col80_validator=_blank_only,
+        col77_hint='Record-specific field; only line length is checked',
+        col80_hint='Record-specific field; only line length is checked',
+        col77_validator=_any_character,
+        col80_validator=_any_character,
     ),
 }
 
 # Delayed-particle family: D in column 8 with P/N/A/D/T in column 9.
-for _letter in DELAYED_PARTICLES:
-    RECORD_DEFINITIONS['D' + _letter] = _delayed_particle_definition(_letter)
-del _letter
+RECORD_DEFINITIONS.update({
+    'D' + letter: _delayed_particle_definition(letter)
+    for letter in DELAYED_PARTICLES
+})
 
 
 def _record_key(line: str) -> Optional[str]:
@@ -238,7 +262,7 @@ def print_ruler(line: str, label: Optional[str] = None) -> bool:
     print('12345678901234567890123456789012345678901234567890123456789012345678901234567890')
     
     record_key = _record_key(line)
-    record_def = RECORD_DEFINITIONS.get(record_key)
+    record_def = RECORD_DEFINITIONS.get(record_key) if record_key is not None else None
     comment_hint = _describe_comment(line)
     is_comment = comment_hint is not None
     free_text = _is_free_text_record(line)
@@ -260,7 +284,8 @@ def print_ruler(line: str, label: Optional[str] = None) -> bool:
             print('Hidden message (free-text) record: 80-column length is not enforced.')
         else:
             print('Comment lines must still obey the 80-column rule and inherit the associated record scope.')
-    elif record_def and len(line) > 6 and line[6] in OTHER_COL7_FLAGS:
+    elif (record_def and record_key not in {'PN'}
+          and len(line) > 6 and line[6] in OTHER_COL7_FLAGS):
         print(f'{OTHER_COL7_FLAGS[line[6]].capitalize()} record (flag "{line[6]}"): '
               'free-form text, column-77/80 field checks are not applied.')
     elif record_key and not record_def and not is_blank:
@@ -281,7 +306,10 @@ def print_ruler(line: str, label: Optional[str] = None) -> bool:
     if '\t' in line:
         errors.append('Tab character present. ENSDF records must use spaces only.')
     
-    if record_key and not record_def and not is_comment and not is_blank:
+    if _nucid_shifted_left(line):
+        errors.append('NUCID shifted left: Column 1 is digit "' + line[0]
+                      + '" (must be space for A<100).')
+    elif record_key and not record_def and not is_comment and not is_blank:
         errors.append(f'Unknown/Invalid record type "{record_key}" at Column 8.')
         # Specific heuristic for shifted comments
         if len(line) > 7 and line[7] in {'c', 'C'} and line[6] == ' ':
@@ -289,9 +317,6 @@ def print_ruler(line: str, label: Optional[str] = None) -> bool:
         if len(line) > 6 and line[5] == 'c' and line[6] != 'c':
             errors.append('HINT: Found "c" in Column 6 (continuation field). Comment flags '
                           'must be in Column 7 with text starting at Column 10.')
-        # NUCID shift detection: if col 1 is a digit, the whole line is shifted left
-        if _nucid_shifted_left(line) and len(line) < 80:
-            errors.append('NUCID shifted left: Column 1 is digit "' + line[0] + '" (must be space for A<100). Whole line shifted left by 1 column.')
     elif is_comment and line[7:8].strip() and not line[7].isalpha():
         errors.append(f'Comment record has invalid commented-record-type "{line[7]}" in '
                       'Column 8. Expected blank (dataset-wide comment) or a record-type '
@@ -308,7 +333,8 @@ def print_ruler(line: str, label: Optional[str] = None) -> bool:
             errors.append(f'Invalid commented-record-type code "{col8}{col9}" in Columns 8-9. '
                           'Codes are 1-2 letters, left-justified at Column 8.')
 
-    if is_primary:
+    if (is_primary and record_def is not None
+            and record_key not in RECORDS_WITHOUT_TRAILING_FIELD_CHECKS):
         col_77 = line[76] if len(line) > 76 else ' '
         col_80 = line[79] if len(line) > 79 else ' '
 
@@ -392,7 +418,8 @@ def scan_file(filename: str, show_only_wrong: bool = False, line_number: Optiona
         # Check ALL record types (H, L, G, E, B, A, delayed-particle and PN records)
         # ENSDF standard: ALL record types must be exactly 80 characters
         key = _record_key(line)
-        if key in RECORD_DEFINITIONS or _is_misplaced_comment(line):
+        if (key in RECORD_DEFINITIONS or _is_misplaced_comment(line)
+                or _nucid_shifted_left(line)):
             total_checked += 1
             if show_only_wrong:
                 if not _quiet_call(print_ruler, line, f'{filename}:{lineno}'):
